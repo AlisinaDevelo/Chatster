@@ -2,6 +2,7 @@ import React, { Component } from 'react';
 // import logo from './logo.svg';
 import './App.css';
 import { connect, sendMsg } from './api';
+import Header from './components/Header/Header';
 
 class App extends Component {
   constructor(props) {
