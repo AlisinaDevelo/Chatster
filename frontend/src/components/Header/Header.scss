@@ -1,12 +1,15 @@
 .header {
-  background-color: #40444a;
-  width: 100%;
-  margin: 0;
-  padding: 10px;
+  background-color: #4a69bd;
+  padding: 15px 20px;
   color: white;
-
-  h2 {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  border-radius: 0 0 8px 8px;
+  margin-bottom: 20px;
+  
+  h1 {
     margin: 0;
-    padding: 0;
+    font-size: 1.8rem;
+    font-weight: 600;
+    letter-spacing: 0.5px;
   }
 }
