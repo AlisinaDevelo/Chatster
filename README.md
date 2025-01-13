@@ -31,3 +31,51 @@ Chatster is a real-time chat application built with Go (Golang) for the backend 
 - Node.js (14.x or later)
 - npm (6.x or later)
 
+### Running the Application
+
+#### Backend
+
+1. Navigate to the backend directory:
+   ```
+   cd backend
+   ```
+
+2. Run the Go server:
+   ```
+   go run main.go
+   ```
+
+The backend server will start on http://localhost:8080.
+
+#### Frontend
+
+1. Navigate to the frontend directory:
+   ```
+   cd frontend
+   ```
+
+2. Install dependencies:
+   ```
+   npm install
+   ```
+
+3. Start the React development server:
+   ```
+   npm start
+   ```
+
+The frontend application will start on http://localhost:3000.
+
+## Usage
+
+1. Open your browser and navigate to http://localhost:3000
+2. Enter your username when prompted
+3. Start chatting with other connected users in real-time
+
+## Future Enhancements
+
+- Add user authentication with JWT
+- Implement private messaging
+- Add message persistence with SQLite
+- Create chat rooms/channels
+
