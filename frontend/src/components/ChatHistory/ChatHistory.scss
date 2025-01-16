@@ -1,0 +1,101 @@
+.chat-history {
+  background-color: #f7f9fb;
+  border-radius: 10px;
+  padding: 20px;
+  margin-bottom: 20px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+  
+  .chat-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 15px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #e1e4e8;
+    
+    h2 {
+      font-size: 1.2rem;
+      color: #333;
+      margin: 0;
+    }
+    
+    .message-count {
+      background: #edf2f7;
+      color: #718096;
+      font-size: 0.75rem;
+      padding: 3px 8px;
+      border-radius: 12px;
+    }
+  }
+  
+  .messages {
+    max-height: 400px;
+    overflow-y: auto;
+    padding-right: 5px;
+    
+    &::-webkit-scrollbar {
+      width: 6px;
+    }
+    
+    &::-webkit-scrollbar-thumb {
+      background-color: #c1c1c1;
+      border-radius: 3px;
+    }
+  }
+  
+  .message-container {
+    margin-bottom: 12px;
+    
+    .message {
+      .message-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 5px;
+        
+        .username {
+          font-weight: 600;
+          color: #2a5885;
+          font-size: 0.9rem;
+        }
+        
+        .timestamp {
+          color: #718096;
+          font-size: 0.75rem;
+        }
+      }
+      
+      .message-content {
+        background-color: #ffffff;
+        padding: 10px 15px;
+        border-radius: 8px;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+        color: #333;
+        line-height: 1.4;
+        word-break: break-word;
+      }
+    }
+  }
+  
+  .message-notification {
+    text-align: center;
+    margin: 16px 0;
+    
+    .notification {
+      display: inline-block;
+      background-color: #ebf5ff;
+      padding: 6px 12px;
+      border-radius: 16px;
+      color: #3182ce;
+      font-size: 0.85rem;
+      font-style: italic;
+    }
+  }
+  
+  .no-messages {
+    text-align: center;
+    padding: 30px 0;
+    color: #718096;
+    font-style: italic;
+  }
+} 

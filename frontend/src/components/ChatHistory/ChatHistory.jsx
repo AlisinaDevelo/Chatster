@@ -1,5 +1,11 @@
 import React, { useEffect, useRef } from 'react';
-import { FaBell, FaUser } from 'react-icons/fa';
+import './ChatHistory.scss';
+
+const formatTime = (timestamp) => {
+  // If there's a timestamp (from DB), use it, otherwise use current time
+  const date = timestamp ? new Date(timestamp) : new Date();
+  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+};
 
 const ChatHistory = ({ chatHistory }) => {
   const messagesEndRef = useRef(null);
@@ -18,27 +24,19 @@ const ChatHistory = ({ chatHistory }) => {
       const isNotification = msg.type === 'notification';
       
       return (
-        <div key={index} className={`mb-4 ${isNotification ? 'flex justify-center' : ''}`}>
+        <div key={index} className={isNotification ? 'message-notification' : 'message-container'}>
           {isNotification ? (
-            <div className="bg-blue-50 px-4 py-2 rounded-full text-sm text-blue-700 flex items-center shadow-sm">
-              <FaBell className="mr-2 text-blue-500" />
-              <span>{msg.content}</span>
+            <div className="notification">
+              {msg.content}
             </div>
           ) : (
-            <div className="flex items-start mb-4 last:mb-0">
-              <div className="bg-primary bg-opacity-10 rounded-full p-2 mr-3">
-                <FaUser className="text-primary" />
+            <div className="message">
+              <div className="message-header">
+                <span className="username">{msg.username}</span>
+                <span className="timestamp">{formatTime(msg.timestamp)}</span>
               </div>
-              <div className="flex-1">
-                <div className="flex items-center mb-1">
-                  <span className="font-semibold text-gray-800">{msg.username}</span>
-                  <span className="text-xs text-gray-500 ml-2">
-                    {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                  </span>
-                </div>
-                <div className="bg-white rounded-lg p-3 shadow-message text-gray-700">
-                  {msg.content}
-                </div>
+              <div className="message-content">
+                {msg.content}
               </div>
             </div>
           )}
@@ -48,17 +46,15 @@ const ChatHistory = ({ chatHistory }) => {
   };
   
   return (
-    <div className="bg-gray-50 rounded-lg shadow-soft p-4">
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-lg font-semibold text-gray-800">Chat History</h2>
-        <span className="text-xs text-gray-500 bg-gray-200 px-2 py-1 rounded-full">
-          {chatHistory.length} messages
-        </span>
+    <div className="chat-history">
+      <div className="chat-header">
+        <h2>Chat History</h2>
+        <span className="message-count">{chatHistory.length} messages</span>
       </div>
       
-      <div className="h-80 overflow-y-auto pr-2 space-y-2 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
+      <div className="messages">
         {chatHistory.length > 0 ? renderMessages() : (
-          <div className="text-center text-gray-500 py-8">
+          <div className="no-messages">
             No messages yet. Start the conversation!
           </div>
         )}

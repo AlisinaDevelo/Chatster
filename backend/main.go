@@ -5,16 +5,20 @@ import (
 	"log"
 	"net/http"
 	"sync"
+	"time"
 
+	"github.com/AliSinaDevelo/Chatster/db"
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
 )
 
 // Message represents a chat message
 type Message struct {
-	Username string `json:"username"`
-	Content  string `json:"content"`
-	Type     string `json:"type"`
+	ID        int64     `json:"id,omitempty"`
+	Username  string    `json:"username"`
+	Content   string    `json:"content"`
+	Type      string    `json:"type"`
+	Timestamp time.Time `json:"timestamp,omitempty"`
 }
 
 // Client represents a connected client
@@ -32,14 +36,16 @@ type Hub struct {
 	register   chan *Client
 	unregister chan *Client
 	mutex      sync.Mutex
+	database   *db.DB
 }
 
-func newHub() *Hub {
+func newHub(database *db.DB) *Hub {
 	return &Hub{
 		clients:    make(map[*Client]bool),
 		broadcast:  make(chan Message),
 		register:   make(chan *Client),
 		unregister: make(chan *Client),
+		database:   database,
 	}
 }
 
@@ -50,24 +56,49 @@ func (h *Hub) run() {
 			h.mutex.Lock()
 			h.clients[client] = true
 			h.mutex.Unlock()
+
+			// Send recent message history to the new client
+			go h.sendMessageHistory(client)
+
 			// Notify about new user
-			h.broadcast <- Message{
+			notification := Message{
 				Username: "System",
 				Content:  fmt.Sprintf("%s joined the chat", client.Username),
 				Type:     "notification",
 			}
+
+			// Save the notification
+			_, err := h.database.SaveMessage(notification.Username, notification.Content, notification.Type)
+			if err != nil {
+				log.Printf("Error saving notification: %v", err)
+			}
+
+			h.broadcast <- notification
+
 		case client := <-h.unregister:
 			h.mutex.Lock()
 			if _, ok := h.clients[client]; ok {
 				delete(h.clients, client)
-				close := Message{
-					Username: "System",
-					Content:  fmt.Sprintf("%s left the chat", client.Username),
-					Type:     "notification",
+
+				// Don't notify if username is not set
+				if client.Username != "Anonymous" {
+					notification := Message{
+						Username: "System",
+						Content:  fmt.Sprintf("%s left the chat", client.Username),
+						Type:     "notification",
+					}
+
+					// Save the notification
+					_, err := h.database.SaveMessage(notification.Username, notification.Content, notification.Type)
+					if err != nil {
+						log.Printf("Error saving notification: %v", err)
+					}
+
+					h.broadcast <- notification
 				}
-				h.broadcast <- close
 			}
 			h.mutex.Unlock()
+
 		case message := <-h.broadcast:
 			h.mutex.Lock()
 			for client := range h.clients {
@@ -81,6 +112,37 @@ func (h *Hub) run() {
 			h.mutex.Unlock()
 		}
 	}
+}
+
+func (h *Hub) sendMessageHistory(client *Client) {
+	// Get recent messages from the database
+	messages, err := h.database.GetRecentMessages(50)
+	if err != nil {
+		log.Printf("Error retrieving message history: %v", err)
+		return
+	}
+
+	// Send message history to the client
+	for _, msg := range messages {
+		message := Message{
+			Username: msg.Username,
+			Content:  msg.Content,
+			Type:     msg.Type,
+		}
+		err := client.Conn.WriteJSON(message)
+		if err != nil {
+			log.Printf("Error sending message history: %v", err)
+			return
+		}
+	}
+
+	// Send a welcome message
+	welcome := Message{
+		Username: "System",
+		Content:  "Welcome to the chat! You can see the last 50 messages.",
+		Type:     "notification",
+	}
+	client.Conn.WriteJSON(welcome)
 }
 
 var upgrader = websocket.Upgrader{
@@ -113,6 +175,17 @@ func (c *Client) readMessages() {
 
 		// Add username to the message
 		msg.Username = c.Username
+
+		// Save message to database
+		dbMsg, err := c.Hub.database.SaveMessage(msg.Username, msg.Content, msg.Type)
+		if err != nil {
+			log.Printf("Error saving message: %v", err)
+		} else {
+			// Update message with database fields
+			msg.ID = dbMsg.ID
+			msg.Timestamp = dbMsg.Timestamp
+		}
+
 		c.Hub.broadcast <- msg
 	}
 }
@@ -152,10 +225,21 @@ func enableCORS(next http.Handler) http.Handler {
 }
 
 func main() {
+	// Initialize the database
+	database, err := db.New()
+	if err != nil {
+		log.Fatalf("Failed to initialize database: %v", err)
+	}
+	defer database.Close()
+
+	// Create router
 	r := mux.NewRouter()
-	hub := newHub()
+
+	// Initialize the hub with the database
+	hub := newHub(database)
 	go hub.run()
 
+	// Set up routes
 	r.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "Chatster API Server")
 	})
@@ -164,8 +248,11 @@ func main() {
 		serveWs(hub, w, r)
 	})
 
+	// Add CORS middleware
 	r.Use(enableCORS)
 
-	fmt.Println("Chatster Server v0.1.0 - Starting on :8080")
+	// Start the server
+	fmt.Println("Chatster Server v0.2.0 - Starting on :8080")
+	fmt.Println("Messages are now being stored in SQLite database")
 	log.Fatal(http.ListenAndServe(":8080", r))
 }

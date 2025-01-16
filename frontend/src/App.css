@@ -16,6 +16,9 @@ body {
   max-width: 800px;
   margin: 0 auto;
   padding: 20px;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
 }
 
 .chat-container {
@@ -23,6 +26,25 @@ body {
   border-radius: 10px;
   padding: 20px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  flex-grow: 1;
+  margin-bottom: 20px;
+}
+
+.connection-status {
+  background-color: #fff3cd;
+  color: #856404;
+  padding: 8px 16px;
+  border-radius: 6px;
+  margin-bottom: 16px;
+  text-align: center;
+  font-size: 14px;
+}
+
+.footer {
+  text-align: center;
+  color: #666;
+  padding: 10px 0;
+  font-size: 14px;
 }
 
 .App-logo {

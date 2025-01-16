@@ -50,27 +50,23 @@ function App() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-gray-50 to-gray-100">
-      <div className="max-w-3xl mx-auto px-4 py-6">
-        <Header />
-        
-        <div className="bg-white rounded-xl shadow-lg overflow-hidden border border-gray-100">
-          {connectionStatus !== 'connected' && (
-            <div className="bg-yellow-50 px-4 py-2 text-sm text-yellow-700 flex items-center justify-center">
-              {connectionStatus === 'connecting' ? 'Connecting to server...' : 'Disconnected from server'}
-            </div>
-          )}
-          
-          <div className="p-4 sm:p-6">
-            <ChatHistory chatHistory={chatHistory} />
-            <ChatInput sendMessage={send} hasUsername={hasUsername} />
+    <div className="App">
+      <Header />
+      
+      <div className="chat-container">
+        {connectionStatus !== 'connected' && (
+          <div className="connection-status">
+            {connectionStatus === 'connecting' ? 'Connecting to server...' : 'Disconnected from server'}
           </div>
-        </div>
+        )}
         
-        <footer className="mt-8 text-center text-sm text-gray-500">
-          <p>Chatster © {new Date().getFullYear()} - Real-time chat application</p>
-        </footer>
+        <ChatHistory chatHistory={chatHistory} />
+        <ChatInput sendMessage={send} hasUsername={hasUsername} />
       </div>
+      
+      <footer className="footer">
+        <p>Chatster © {new Date().getFullYear()} - Real-time chat application</p>
+      </footer>
     </div>
   );
 }
