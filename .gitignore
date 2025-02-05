@@ -1,0 +1,22 @@
+.DS_Store
+*.db
+*.db-shm
+*.db-wal
+
+# Backend
+/backend/chatster.db
+
+# Frontend (also see frontend/.gitignore)
+/frontend/node_modules/
+/frontend/build/
+/frontend/coverage/
+
+# Env
+.env
+.env.*.local
+
+# Editor
+.idea/
+.vscode/
+*.swp
+*.swo
