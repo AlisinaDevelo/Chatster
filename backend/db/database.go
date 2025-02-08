@@ -23,20 +23,25 @@ type DB struct {
 	*sql.DB
 }
 
-// New creates a new database connection
+// New creates a new database connection at the default path (./chatster.db).
 func New() (*DB, error) {
-	database, err := sql.Open("sqlite3", "./chatster.db")
+	return Open("./chatster.db")
+}
+
+// Open creates a database connection at the given SQLite file path.
+func Open(path string) (*DB, error) {
+	database, err := sql.Open("sqlite3", path)
 	if err != nil {
 		return nil, err
 	}
 
-	// Test the connection
 	if err := database.Ping(); err != nil {
+		_ = database.Close()
 		return nil, err
 	}
 
-	// Create the database if it doesn't exist
 	if err := initDB(database); err != nil {
+		_ = database.Close()
 		return nil, err
 	}
 
