@@ -1,52 +1,80 @@
-var socket = new WebSocket('ws://localhost:8080/ws');
+function defaultWsUrl() {
+  if (process.env.REACT_APP_WS_URL) {
+    return process.env.REACT_APP_WS_URL;
+  }
+  if (process.env.NODE_ENV === 'development') {
+    const port = process.env.REACT_APP_WS_PORT || '8080';
+    return `ws://127.0.0.1:${port}/ws`;
+  }
+  const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  return `${proto}//${window.location.host}/ws`;
+}
 
-let connect = (cb, setConnectionStatus) => {
-  console.log("Attempting Connection..");
-  
+let socket = null;
+let reconnectTimer = null;
+
+function clearReconnect() {
+  if (reconnectTimer) {
+    clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+  }
+}
+
+export function disconnect() {
+  clearReconnect();
+  if (socket) {
+    socket.onopen = null;
+    socket.onmessage = null;
+    socket.onclose = null;
+    socket.onerror = null;
+    try {
+      socket.close();
+    } catch {
+      /* ignore */
+    }
+    socket = null;
+  }
+}
+
+export function connect(onMessage, setConnectionStatus) {
+  disconnect();
+
   if (setConnectionStatus) {
     setConnectionStatus('connecting');
   }
 
+  socket = new WebSocket(defaultWsUrl());
+
   socket.onopen = () => {
-    console.log("Successfully Connected");
     if (setConnectionStatus) {
       setConnectionStatus('connected');
     }
   };
 
   socket.onmessage = (msg) => {
-    console.log("Received message:", msg);
-    cb(msg);
+    onMessage(msg);
   };
 
-  socket.onclose = (event) => {
-    console.log("Socket Closed Connection: ", event);
+  socket.onclose = () => {
     if (setConnectionStatus) {
       setConnectionStatus('disconnected');
     }
-    
-    // Try to reconnect after 2 seconds
-    setTimeout(() => {
-      socket = new WebSocket('ws://localhost:8080/ws');
-      connect(cb, setConnectionStatus);
+    clearReconnect();
+    reconnectTimer = window.setTimeout(() => {
+      reconnectTimer = null;
+      connect(onMessage, setConnectionStatus);
     }, 2000);
   };
 
-  socket.onerror = (error) => {
-    console.log("Socket Error: ", error);
+  socket.onerror = () => {
     if (setConnectionStatus) {
       setConnectionStatus('error');
     }
   };
-};
-
-let sendMsg = (msg) => {
-  console.log("sending msg: ", msg);
-  if (socket.readyState === WebSocket.OPEN) {
-    socket.send(msg);
-  } else {
-    console.log("Socket not connected, message not sent");
-  }
 }
 
-export { connect, sendMsg };
+export function sendMsg(msg) {
+  if (socket && socket.readyState === WebSocket.OPEN) {
+    socket.send(msg);
+  }
+}
