@@ -11,7 +11,10 @@ const ChatHistory = ({ chatHistory }) => {
   const messagesEndRef = useRef(null);
   
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    const el = messagesEndRef.current;
+    if (el && typeof el.scrollIntoView === 'function') {
+      el.scrollIntoView({ behavior: 'smooth' });
+    }
   };
   
   useEffect(() => {
@@ -20,11 +23,12 @@ const ChatHistory = ({ chatHistory }) => {
   
   const renderMessages = () => {
     return chatHistory.map((msg, index) => {
-      // Determine if the message is a notification or a regular message
       const isNotification = msg.type === 'notification';
-      
+      const key =
+        msg.id != null ? `msg-${msg.id}` : `local-${index}-${msg.username}-${msg.content?.slice(0, 16)}`;
+
       return (
-        <div key={index} className={isNotification ? 'message-notification' : 'message-container'}>
+        <div key={key} className={isNotification ? 'message-notification' : 'message-container'}>
           {isNotification ? (
             <div className="notification">
               {msg.content}

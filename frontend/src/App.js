@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 // import logo from './logo.svg';
 import './App.css';
-import { connect, sendMsg } from './api';
+import { connect, disconnect, sendMsg } from './api';
 import Header from './components/Header/Header';
 import ChatHistory from './components/ChatHistory/ChatHistory';
 import ChatInput from './components/ChatInput/ChatInput';
@@ -15,11 +15,12 @@ function App() {
     connect((msg) => {
       try {
         const parsedMessage = JSON.parse(msg.data);
-        setChatHistory(prevChatHistory => [...prevChatHistory, parsedMessage]);
+        setChatHistory((prevChatHistory) => [...prevChatHistory, parsedMessage]);
       } catch (e) {
         console.error('Error parsing message:', e);
       }
     }, setConnectionStatus);
+    return () => disconnect();
   }, []);
 
   const send = (message) => {
@@ -51,17 +52,23 @@ function App() {
 
   return (
     <div className="App">
-      <Header />
+      <Header connectionStatus={connectionStatus} />
       
       <div className="chat-container">
         {connectionStatus !== 'connected' && (
-          <div className="connection-status">
-            {connectionStatus === 'connecting' ? 'Connecting to server...' : 'Disconnected from server'}
+          <div className="connection-status" role="status">
+            {connectionStatus === 'connecting' && 'Connecting…'}
+            {connectionStatus === 'disconnected' && 'Reconnecting…'}
+            {connectionStatus === 'error' && 'Connection error — retrying…'}
           </div>
         )}
         
         <ChatHistory chatHistory={chatHistory} />
-        <ChatInput sendMessage={send} hasUsername={hasUsername} />
+        <ChatInput
+          sendMessage={send}
+          hasUsername={hasUsername}
+          connectionStatus={connectionStatus}
+        />
       </div>
       
       <footer className="footer">
@@ -70,26 +77,5 @@ function App() {
     </div>
   );
 }
-
-/* function App() {
-  return (
-    <div className="App">
-      <header className="App-header">
-        <img src={logo} className="App-logo" alt="logo" />
-        <p>
-          Edit <code>src/App.js</code> and save to reload.
-        </p>
-        <a
-          className="App-link"
-          href="https://reactjs.org"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Learn React
-        </a>
-      </header>
-    </div>
-  );
-} */
 
 export default App;
