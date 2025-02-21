@@ -1,55 +1,97 @@
 .chat-input {
-  margin-top: 20px;
-  
+  margin-top: 18px;
+  padding-top: 18px;
+  border-top: 1px solid var(--border);
+
   form {
     display: flex;
-    gap: 10px;
+    gap: 12px;
+    flex-wrap: wrap;
   }
-  
+
   input {
     flex: 1;
-    padding: 12px 16px;
-    border-radius: 25px;
-    border: 1px solid #dfe1e5;
-    font-size: 1rem;
+    min-width: 200px;
+    padding: 14px 18px;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    font-size: 14px;
+    font-family: var(--font-mono);
+    color: var(--text);
+    background: rgba(0, 0, 0, 0.35);
     outline: none;
-    transition: border 0.2s, box-shadow 0.2s;
-    
-    &:focus {
-      border-color: #4a69bd;
-      box-shadow: 0 0 0 2px rgba(74, 105, 189, 0.2);
-    }
-    
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+
     &::placeholder {
-      color: #9aa0a6;
+      color: var(--text-muted);
     }
-  }
-  
-  button {
-    background-color: #4a69bd;
-    color: white;
-    border: none;
-    border-radius: 25px;
-    padding: 0 20px;
-    font-size: 0.95rem;
-    font-weight: 500;
-    cursor: pointer;
-    transition: background-color 0.2s;
-    
-    &:hover {
-      background-color: #3a5395;
+
+    &:focus {
+      border-color: rgba(46, 230, 199, 0.55);
+      box-shadow: 0 0 0 3px var(--accent-dim);
     }
-    
+
     &:disabled {
-      background-color: #c1c1c1;
+      opacity: 0.45;
       cursor: not-allowed;
     }
   }
-  
-  .hint {
-    margin-top: 10px;
-    text-align: center;
-    font-size: 0.85rem;
-    color: #718096;
+
+  button {
+    font-family: var(--font-sans);
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 14px 22px;
+    border-radius: 12px;
+    border: none;
+    cursor: pointer;
+    color: var(--bg-deep);
+    background: linear-gradient(135deg, var(--accent) 0%, #5af0d8 50%, var(--violet) 140%);
+    background-size: 200% 200%;
+    animation: btn-glow 4s ease infinite;
+    transition: transform 0.15s ease, filter 0.15s ease;
+
+    &:hover:not(:disabled) {
+      transform: translateY(-1px);
+      filter: brightness(1.05);
+    }
+
+    &:active:not(:disabled) {
+      transform: translateY(0);
+    }
+
+    &:disabled {
+      opacity: 0.35;
+      cursor: not-allowed;
+      animation: none;
+      filter: grayscale(0.4);
+    }
   }
-} 
+
+  .hint {
+    margin: 12px 0 0;
+    text-align: center;
+    font-size: 12px;
+    color: var(--text-muted);
+    letter-spacing: 0.02em;
+  }
+}
+
+@keyframes btn-glow {
+  0%,
+  100% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-input button {
+    animation: none;
+    background: var(--accent);
+  }
+}

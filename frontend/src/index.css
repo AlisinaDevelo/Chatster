@@ -1,14 +1,93 @@
+:root {
+  --bg-deep: #07080d;
+  --bg-panel: rgba(12, 14, 22, 0.72);
+  --text: #e8eaef;
+  --text-muted: rgba(232, 234, 239, 0.55);
+  --accent: #2ee6c7;
+  --accent-dim: rgba(46, 230, 199, 0.35);
+  --violet: #8b7bff;
+  --violet-dim: rgba(139, 123, 255, 0.35);
+  --border: rgba(255, 255, 255, 0.1);
+  --danger: #ff6b8a;
+  --warn: #ffc857;
+  --radius-lg: 20px;
+  --radius-md: 14px;
+  --shadow-glow: 0 0 60px rgba(46, 230, 199, 0.08);
+  --font-sans: 'Outfit', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
 body {
   margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-    sans-serif;
+  min-height: 100vh;
+  font-family: var(--font-mono);
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--text);
+  background: var(--bg-deep);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background-color: #f3f4f6;
+  position: relative;
+  overflow-x: hidden;
+}
+
+body::before {
+  content: '';
+  position: fixed;
+  inset: -25%;
+  z-index: -2;
+  background:
+    radial-gradient(ellipse 90% 60% at 15% 35%, rgba(46, 230, 199, 0.14), transparent 55%),
+    radial-gradient(ellipse 70% 90% at 85% 55%, rgba(139, 123, 255, 0.2), transparent 55%),
+    radial-gradient(ellipse 50% 45% at 50% 100%, rgba(56, 189, 248, 0.1), transparent 50%);
+  animation: mesh-shift 20s ease-in-out infinite alternate;
+}
+
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background-image: linear-gradient(
+      rgba(255, 255, 255, 0.03) 1px,
+      transparent 1px
+    ),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+  background-size: 48px 48px;
+  mask-image: radial-gradient(ellipse 80% 70% at 50% 40%, black, transparent);
+  pointer-events: none;
+  opacity: 0.5;
+}
+
+@keyframes mesh-shift {
+  0% {
+    transform: translate(0, 0) scale(1) rotate(0deg);
+  }
+  100% {
+    transform: translate(2%, -3%) scale(1.06) rotate(1deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body::before {
+    animation: none;
+  }
+}
+
+#root {
+  min-height: 100vh;
 }
 
 code {
-  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
-    monospace;
+  font-family: var(--font-mono);
 }
