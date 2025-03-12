@@ -1,81 +1,59 @@
 # Chatster
 
-Chatster is a real-time chat application built with Go (Golang) for the backend and React for the frontend. The application allows users to create accounts, log in, and chat with others in real-time.
+Real-time chat demo: **Go** WebSocket hub + **SQLite** history, **React** client with a dark glass UI.
 
-## Features
+[![CI](https://github.com/AliSinaDevelo/Chatster/actions/workflows/ci.yml/badge.svg)](https://github.com/AliSinaDevelo/Chatster/actions/workflows/ci.yml)
 
-- **Real-Time Messaging**: Chat with others instantly, with messages delivered in real-time.
-- **User Authentication**: Secure user authentication and session management.
-- **Responsive UI**: A responsive and modern user interface built with React.
-- **WebSocket Integration**: Efficient communication between the client and server using WebSockets.
+## Highlights
 
-## Technologies Used
+- WebSocket broadcast with reconnect and clean teardown on navigation (Strict Mode safe).
+- Last **50** messages replayed on connect; new messages persisted with timestamps.
+- **`GET /health`** for load balancers and monitoring.
+- **GitHub Actions** runs Go tests (race + vet) and React tests + production build.
 
-- **Backend**:
-  - [Go](https://golang.org/): The backend server is built using Go, providing high performance and concurrency handling.
-  - [Gorilla WebSocket](https://github.com/gorilla/websocket): Used for real-time communication between the server and clients.
-  - [Gorilla Mux](https://github.com/gorilla/mux): HTTP request router and dispatcher for matching incoming requests to their respective handler.
-  
-- **Frontend**:
-  - [React](https://reactjs.org/): A JavaScript library for building user interfaces.
-  - [Axios](https://axios-http.com/): Used for making HTTP requests from the frontend to the backend.
-  
-- **Database**:
-  - [SQLite](https://www.sqlite.org/): A lightweight, disk-based database used to store user data and messages.
+## Quick start
 
-## Getting Started
+**Backend** (port `8080`, creates `chatster.db` in `backend/`):
 
-### Prerequisites
+```bash
+cd backend && go run .
+```
 
-- Go (1.16+)
-- Node.js (14.x or later)
-- npm (6.x or later)
+**Frontend**:
 
-### Running the Application
+```bash
+cd frontend && npm install && npm start
+```
 
-#### Backend
+Open [http://localhost:3000](http://localhost:3000), pick a username, then chat. Run two browser windows to see live delivery.
 
-1. Navigate to the backend directory:
-   ```
-   cd backend
-   ```
+## Configuration
 
-2. Run the Go server:
-   ```
-   go run main.go
-   ```
+| Variable | Purpose |
+|----------|---------|
+| `REACT_APP_WS_URL` | Full WebSocket URL (e.g. `wss://api.example.com/ws`). |
+| `REACT_APP_WS_PORT` | Dev-only port if the API is not on `8080`. |
 
-The backend server will start on http://localhost:8080.
+Copy `frontend/.env.example` to `frontend/.env.local` when needed.
 
-#### Frontend
+## Scripts
 
-1. Navigate to the frontend directory:
-   ```
-   cd frontend
-   ```
+| Command | Description |
+|---------|-------------|
+| `make test` | Backend `go test -race` + frontend `npm run test:ci`. |
+| `cd backend && go test -race ./...` | Go unit tests. |
+| `cd frontend && npm run test:ci` | Jest once (CI). |
+| `cd frontend && npm run build` | Optimized static build. |
 
-2. Install dependencies:
-   ```
-   npm install
-   ```
+## Documentation
 
-3. Start the React development server:
-   ```
-   npm start
-   ```
+- [Architecture](docs/ARCHITECTURE.md) — data flow, components, security notes.
+- [Workflows](docs/WORKFLOWS.md) — CI, local dev, release checklist.
 
-The frontend application will start on http://localhost:3000.
+## Stack
 
-## Usage
+Go 1.22 · Gorilla Mux & WebSocket · SQLite (CGO) · React 18 · Sass · GitHub Actions.
 
-1. Open your browser and navigate to http://localhost:3000
-2. Enter your username when prompted
-3. Start chatting with other connected users in real-time
+## License
 
-## Future Enhancements
-
-- Add user authentication with JWT
-- Implement private messaging
-- Add message persistence with SQLite
-- Create chat rooms/channels
-
+See [LICENSE](LICENSE).
