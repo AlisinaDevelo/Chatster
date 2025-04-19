@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/AliSinaDevelo/Chatster/db"
+	"github.com/AliSinaDevelo/Chatster/internal/config"
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
 )
@@ -225,8 +226,9 @@ func enableCORS(next http.Handler) http.Handler {
 }
 
 func main() {
-	// Initialize the database
-	database, err := db.New()
+	cfg := config.FromEnv()
+
+	database, err := db.Open(cfg.DBPath)
 	if err != nil {
 		log.Fatalf("Failed to initialize database: %v", err)
 	}
@@ -257,8 +259,6 @@ func main() {
 	// Add CORS middleware
 	r.Use(enableCORS)
 
-	// Start the server
-	fmt.Println("Chatster Server v0.2.0 - Starting on :8080")
-	fmt.Println("Messages are now being stored in SQLite database")
-	log.Fatal(http.ListenAndServe(":8080", r))
+	log.Printf("Chatster listening on %s (db %s)", cfg.HTTPAddr, cfg.DBPath)
+	log.Fatal(http.ListenAndServe(cfg.HTTPAddr, r))
 }
