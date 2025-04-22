@@ -1,6 +1,8 @@
 package main
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
@@ -247,9 +249,28 @@ func main() {
 	})
 
 	r.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+		defer cancel()
+
+		dbOK := database.PingContext(ctx) == nil
+		status := "ok"
+		code := http.StatusOK
+		if !dbOK {
+			status = "degraded"
+			code = http.StatusServiceUnavailable
+		}
+		dbStatus := "error"
+		if dbOK {
+			dbStatus = "ok"
+		}
+
 		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"status":"ok"}`))
+		w.WriteHeader(code)
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"status":   status,
+			"database": dbStatus,
+			"service":  "chatster",
+		})
 	})
 
 	r.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
