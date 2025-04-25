@@ -4,8 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
+	"os"
 	"sync"
 	"time"
 
@@ -73,7 +74,7 @@ func (h *Hub) run() {
 			// Save the notification
 			_, err := h.database.SaveMessage(notification.Username, notification.Content, notification.Type)
 			if err != nil {
-				log.Printf("Error saving notification: %v", err)
+				slog.Warn("save join notification", "err", err)
 			}
 
 			h.broadcast <- notification
@@ -94,7 +95,7 @@ func (h *Hub) run() {
 					// Save the notification
 					_, err := h.database.SaveMessage(notification.Username, notification.Content, notification.Type)
 					if err != nil {
-						log.Printf("Error saving notification: %v", err)
+						slog.Warn("save leave notification", "err", err)
 					}
 
 					h.broadcast <- notification
@@ -107,7 +108,7 @@ func (h *Hub) run() {
 			for client := range h.clients {
 				err := client.Conn.WriteJSON(message)
 				if err != nil {
-					log.Printf("Error broadcasting message: %v", err)
+					slog.Warn("broadcast", "err", err)
 					client.Conn.Close()
 					delete(h.clients, client)
 				}
@@ -121,7 +122,7 @@ func (h *Hub) sendMessageHistory(client *Client) {
 	// Get recent messages from the database
 	messages, err := h.database.GetRecentMessages(50)
 	if err != nil {
-		log.Printf("Error retrieving message history: %v", err)
+		slog.Warn("message history", "err", err)
 		return
 	}
 
@@ -134,7 +135,7 @@ func (h *Hub) sendMessageHistory(client *Client) {
 		}
 		err := client.Conn.WriteJSON(message)
 		if err != nil {
-			log.Printf("Error sending message history: %v", err)
+			slog.Warn("send history row", "err", err)
 			return
 		}
 	}
@@ -145,7 +146,9 @@ func (h *Hub) sendMessageHistory(client *Client) {
 		Content:  "Welcome to the chat! You can see the last 50 messages.",
 		Type:     "notification",
 	}
-	client.Conn.WriteJSON(welcome)
+	if err := client.Conn.WriteJSON(welcome); err != nil {
+		slog.Warn("welcome message", "err", err)
+	}
 }
 
 var upgrader = websocket.Upgrader{
@@ -165,7 +168,7 @@ func (c *Client) readMessages() {
 		err := c.Conn.ReadJSON(&msg)
 		if err != nil {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
-				log.Printf("Error reading message: %v", err)
+				slog.Warn("read message", "err", err)
 			}
 			break
 		}
@@ -182,7 +185,7 @@ func (c *Client) readMessages() {
 		// Save message to database
 		dbMsg, err := c.Hub.database.SaveMessage(msg.Username, msg.Content, msg.Type)
 		if err != nil {
-			log.Printf("Error saving message: %v", err)
+			slog.Warn("save message", "err", err)
 		} else {
 			// Update message with database fields
 			msg.ID = dbMsg.ID
@@ -196,7 +199,7 @@ func (c *Client) readMessages() {
 func serveWs(hub *Hub, w http.ResponseWriter, r *http.Request) {
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		log.Println(err)
+		slog.Warn("ws upgrade", "err", err)
 		return
 	}
 
@@ -228,11 +231,14 @@ func enableCORS(next http.Handler) http.Handler {
 }
 
 func main() {
+	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo})))
+
 	cfg := config.FromEnv()
 
 	database, err := db.Open(cfg.DBPath)
 	if err != nil {
-		log.Fatalf("Failed to initialize database: %v", err)
+		slog.Error("database init failed", "err", err)
+		os.Exit(1)
 	}
 	defer database.Close()
 
@@ -280,6 +286,9 @@ func main() {
 	// Add CORS middleware
 	r.Use(enableCORS)
 
-	log.Printf("Chatster listening on %s (db %s)", cfg.HTTPAddr, cfg.DBPath)
-	log.Fatal(http.ListenAndServe(cfg.HTTPAddr, r))
+	slog.Info("server starting", "addr", cfg.HTTPAddr, "db", cfg.DBPath)
+	if err := http.ListenAndServe(cfg.HTTPAddr, r); err != nil {
+		slog.Error("server exited", "err", err)
+		os.Exit(1)
+	}
 }
