@@ -7,7 +7,9 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"os/signal"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/AliSinaDevelo/Chatster/db"
@@ -286,9 +288,29 @@ func main() {
 	// Add CORS middleware
 	r.Use(enableCORS)
 
-	slog.Info("server starting", "addr", cfg.HTTPAddr, "db", cfg.DBPath)
-	if err := http.ListenAndServe(cfg.HTTPAddr, r); err != nil {
-		slog.Error("server exited", "err", err)
+	srv := &http.Server{
+		Addr:    cfg.HTTPAddr,
+		Handler: r,
+	}
+
+	go func() {
+		slog.Info("server starting", "addr", cfg.HTTPAddr, "db", cfg.DBPath)
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			slog.Error("listen", "err", err)
+			os.Exit(1)
+		}
+	}()
+
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	<-quit
+	slog.Info("shutdown signal")
+
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		slog.Error("graceful shutdown", "err", err)
 		os.Exit(1)
 	}
+	slog.Info("server stopped")
 }
