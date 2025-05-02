@@ -111,7 +111,7 @@ func (h *Hub) run() {
 				err := client.Conn.WriteJSON(message)
 				if err != nil {
 					slog.Warn("broadcast", "err", err)
-					client.Conn.Close()
+					_ = client.Conn.Close()
 					delete(h.clients, client)
 				}
 			}
@@ -162,7 +162,7 @@ var upgrader = websocket.Upgrader{
 func (c *Client) readMessages() {
 	defer func() {
 		c.Hub.unregister <- c
-		c.Conn.Close()
+		_ = c.Conn.Close()
 	}()
 
 	for {
@@ -242,7 +242,7 @@ func main() {
 		slog.Error("database init failed", "err", err)
 		os.Exit(1)
 	}
-	defer database.Close()
+	defer func() { _ = database.Close() }()
 
 	// Create router
 	r := mux.NewRouter()
@@ -253,7 +253,7 @@ func main() {
 
 	// Set up routes
 	r.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprintf(w, "Chatster API Server")
+		_, _ = fmt.Fprintf(w, "Chatster API Server")
 	})
 
 	r.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {

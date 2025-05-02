@@ -6,7 +6,7 @@ import (
 	"log"
 	"time"
 
-	_ "github.com/mattn/go-sqlite3"
+	_ "github.com/mattn/go-sqlite3" // Driver registers with database/sql as "sqlite3".
 )
 
 // Message represents a chat message
@@ -84,7 +84,7 @@ func (db *DB) SaveMessage(username, content, msgType string) (*Message, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer stmt.Close()
+	defer func() { _ = stmt.Close() }()
 
 	now := time.Now()
 	result, err := stmt.Exec(username, content, msgType, now)
@@ -112,7 +112,7 @@ func (db *DB) GetRecentMessages(limit int) ([]Message, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var messages []Message
 	for rows.Next() {

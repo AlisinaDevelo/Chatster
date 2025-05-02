@@ -42,7 +42,7 @@ func TestSaveMessageSkipsUsernameTypePersistence(t *testing.T) {
 	if err != nil {
 		t.Fatalf("count: %v", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	if !rows.Next() {
 		t.Fatal("expected count row")
 	}
