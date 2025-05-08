@@ -34,10 +34,7 @@ describe('App', () => {
 
   test('sends username handshake on first message', async () => {
     render(<App />);
-    await waitFor(() =>
-      expect(screen.getByPlaceholderText(/enter your username/i)).toBeInTheDocument()
-    );
-    const input = screen.getByPlaceholderText(/enter your username/i);
+    const input = await screen.findByPlaceholderText(/enter your username/i);
     await userEvent.type(input, 'alice');
     await userEvent.click(screen.getByRole('button', { name: /set username/i }));
     expect(sendMsg).toHaveBeenCalledWith(
