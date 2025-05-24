@@ -1,0 +1,28 @@
+services:
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      CHATSTER_HTTP_ADDR: ":8080"
+      CHATSTER_DB_PATH: "/data/chatster.db"
+    volumes:
+      - chatster-data:/data
+    restart: unless-stopped
+
+  web:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        REACT_APP_WS_URL: ws://localhost:8080/ws
+    ports:
+      - "3000:80"
+    depends_on:
+      - api
+    restart: unless-stopped
+
+volumes:
+  chatster-data:
