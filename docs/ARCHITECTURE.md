@@ -23,7 +23,8 @@ flowchart LR
 
 ### Backend (`backend/`)
 
-- **`main.go`**: HTTP routes, WebSocket upgrade (`/ws`), CORS middleware, and the in-memory **hub** that tracks clients and broadcasts JSON messages.
+- **`main.go`**: HTTP server with **graceful shutdown** (SIGINT/SIGTERM), **structured logging** (`log/slog` JSON to stdout), WebSocket upgrade (`/ws`), CORS middleware, and the in-memory **hub** that tracks clients and broadcasts JSON messages.
+- **`internal/config`**: Environment-based configuration (`CHATSTER_HTTP_ADDR`, `CHATSTER_DB_PATH`).
 - **`db/`**: SQLite access — `messages` table, `SaveMessage`, `GetRecentMessages` (last *N* rows, chronological for the client).
 
 **Message flow**
@@ -35,7 +36,7 @@ flowchart LR
 
 **Operational endpoints**
 
-- `GET /health` — JSON `{"status":"ok"}` for probes and CI.
+- `GET /health` — JSON including `status`, `database`, and `service`; **503** when SQLite ping fails (see [OPERATIONS.md](OPERATIONS.md)).
 - `GET /` — short plain-text banner.
 
 ### Frontend (`frontend/`)
@@ -48,6 +49,8 @@ flowchart LR
 
 | Variable | Where | Purpose |
 |----------|--------|---------|
+| `CHATSTER_HTTP_ADDR` | Backend | Listen address (default `:8080`). |
+| `CHATSTER_DB_PATH` | Backend | SQLite file path (default `./chatster.db`). |
 | `REACT_APP_WS_URL` | Frontend build | Full WebSocket URL override (production). |
 | `REACT_APP_WS_PORT` | Frontend dev | Backend port when using default dev URL. |
 
@@ -60,4 +63,4 @@ See `frontend/.env.example`.
 
 ## Possible extensions
 
-- JWT or session auth, rooms, rate limits, message pagination, and structured logging.
+- JWT or session auth, rooms, rate limits, message pagination, and hub-level drain on shutdown.
