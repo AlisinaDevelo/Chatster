@@ -5,7 +5,7 @@ Thanks for helping improve Chatster.
 ## Getting started
 
 1. Fork and clone the repository.
-2. Install **Go 1.22+**, **Node 20+**, and (for local Go lint) [golangci-lint](https://golangci-lint.run/).
+2. Install **Go 1.22+**, **Node 20+**, and (for `make lint`) [golangci-lint](https://golangci-lint.run/welcome/install/) on your PATH. CI runs the same linters if you skip local Go lint.
 3. Run checks from the repo root:
 
 ```bash
