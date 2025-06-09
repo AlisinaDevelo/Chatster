@@ -1,58 +1,77 @@
 # Chatster
 
-Real-time chat demo: **Go** WebSocket hub + **SQLite** history, **React** client with a dark glass UI.
+Real-time chat reference stack: **Go** WebSocket hub + **SQLite** history, **React** client, **Docker**-ready, **CI** with lint and coverage.
 
 [![CI](https://github.com/AliSinaDevelo/Chatster/actions/workflows/ci.yml/badge.svg)](https://github.com/AliSinaDevelo/Chatster/actions/workflows/ci.yml)
 
 ## Highlights
 
-- WebSocket broadcast with reconnect and clean teardown on navigation (Strict Mode safe).
+- WebSocket broadcast with reconnect and clean teardown on navigation (React Strict Mode safe).
 - Last **50** messages replayed on connect; new messages persisted with timestamps.
-- **`GET /health`** for load balancers and monitoring.
-- **GitHub Actions** runs Go tests (race + vet) and React tests + production build.
+- **`GET /health`** with **SQLite ping** (503 when degraded) for real probes.
+- **Structured JSON logs** (`slog`) and **graceful shutdown** on SIGINT/SIGTERM.
+- **GitHub Actions**: golangci-lint, `go test -race` + coverage artifact, ESLint, Jest, production build.
+- **Dependabot** for Actions, Go, and npm.
+- **Docker Compose** for a one-command demo stack.
 
 ## Quick start
 
-**Backend** (port `8080`, creates `chatster.db` in `backend/`):
+### Option A — Docker (fastest to see the UI)
+
+```bash
+docker compose up --build
+```
+
+Open **http://localhost:3000** (UI) and **http://localhost:8080/health** (API health).
+
+### Option B — Native (best for development)
+
+**Terminal 1 — API**
 
 ```bash
 cd backend && go run .
 ```
 
-**Frontend**:
+**Terminal 2 — React**
 
 ```bash
 cd frontend && npm install && npm start
 ```
 
-Open [http://localhost:3000](http://localhost:3000), pick a username, then chat. Run two browser windows to see live delivery.
+Open **http://localhost:3000**. Use two browser tabs or windows to test live messaging.
 
 ## Configuration
 
-| Variable | Purpose |
-|----------|---------|
-| `REACT_APP_WS_URL` | Full WebSocket URL (e.g. `wss://api.example.com/ws`). |
-| `REACT_APP_WS_PORT` | Dev-only port if the API is not on `8080`. |
+| Variable | Scope | Purpose |
+|----------|--------|---------|
+| `CHATSTER_HTTP_ADDR` | Backend | Listen address (default `:8080`). |
+| `CHATSTER_DB_PATH` | Backend | SQLite file (default `./chatster.db`). |
+| `REACT_APP_WS_URL` | Frontend build | Full WebSocket URL (production / Docker build args). |
+| `REACT_APP_WS_PORT` | Frontend dev | Backend port when using default dev WebSocket URL. |
 
-Copy `frontend/.env.example` to `frontend/.env.local` when needed.
+Copy `frontend/.env.example` to `frontend/.env.local` when overriding the client.
 
 ## Scripts
 
 | Command | Description |
 |---------|-------------|
-| `make test` | Backend `go test -race` + frontend `npm run test:ci`. |
-| `cd backend && go test -race ./...` | Go unit tests. |
-| `cd frontend && npm run test:ci` | Jest once (CI). |
+| `make test` | Backend tests + frontend tests (CI mode). |
+| `make lint` | golangci-lint + ESLint (requires golangci-lint installed locally). |
+| `make docker-up` | `docker compose up --build`. |
+| `cd backend && go test -race ./...` | Go tests only. |
+| `cd frontend && npm run test:ci` | Jest once. |
 | `cd frontend && npm run build` | Optimized static build. |
 
 ## Documentation
 
-- [Architecture](docs/ARCHITECTURE.md) — data flow, components, security notes.
-- [Workflows](docs/WORKFLOWS.md) — CI, local dev, release checklist.
+- [Architecture](docs/ARCHITECTURE.md) — components, data flow, security notes.
+- [Workflows](docs/WORKFLOWS.md) — CI, Dependabot, local and Docker dev.
+- [Operations](docs/OPERATIONS.md) — health checks, logging, production checklist.
+- [Contributing](CONTRIBUTING.md) — PRs, `make lint`, code of conduct.
 
 ## Stack
 
-Go 1.22 · Gorilla Mux & WebSocket · SQLite (CGO) · React 18 · Sass · GitHub Actions.
+Go 1.22 · Gorilla Mux & WebSocket · SQLite (CGO) · React 18 · Sass · Docker · GitHub Actions.
 
 ## License
 
