@@ -2,7 +2,6 @@ package db
 
 import (
 	"database/sql"
-	"fmt"
 	"log"
 	"time"
 
@@ -122,13 +121,11 @@ func (db *DB) GetRecentMessages(limit int) ([]Message, error) {
 			return nil, err
 		}
 
-		// Parse the timestamp
-		t, err := time.Parse("2006-01-02 15:04:05", timestamp)
+		ts, err := parseMsgTimestamp(timestamp)
 		if err != nil {
-			fmt.Printf("Error parsing time: %v\n", err)
 			msg.Timestamp = time.Now()
 		} else {
-			msg.Timestamp = t
+			msg.Timestamp = ts
 		}
 
 		messages = append(messages, msg)
@@ -149,4 +146,26 @@ func (db *DB) GetRecentMessages(limit int) ([]Message, error) {
 // Close closes the database connection
 func (db *DB) Close() error {
 	return db.DB.Close()
+}
+
+func parseMsgTimestamp(s string) (time.Time, error) {
+	if t, err := time.Parse(time.RFC3339Nano, s); err == nil {
+		return t, nil
+	}
+	if t, err := time.Parse(time.RFC3339, s); err == nil {
+		return t, nil
+	}
+	layouts := []string{
+		"2006-01-02 15:04:05",
+		"2006-01-02 15:04:05.999999999-07:00",
+	}
+	var last error
+	for _, layout := range layouts {
+		t, err := time.ParseInLocation(layout, s, time.Local)
+		if err == nil {
+			return t, nil
+		}
+		last = err
+	}
+	return time.Time{}, last
 }
