@@ -5,17 +5,28 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
+	"unicode/utf8"
 
 	"github.com/AliSinaDevelo/Chatster/db"
 	"github.com/AliSinaDevelo/Chatster/internal/config"
+	"github.com/AliSinaDevelo/Chatster/internal/metrics"
+	"github.com/AliSinaDevelo/Chatster/internal/ratelimit"
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+)
+
+const (
+	maxUsernameRunes = 64
+	maxMessageRunes  = 4000
 )
 
 // Message represents a chat message
@@ -33,6 +44,13 @@ type Client struct {
 	Conn     *websocket.Conn
 	Username string
 	Hub      *Hub
+	writeMu  sync.Mutex // gorilla/websocket allows one writer at a time
+}
+
+func (c *Client) writeJSON(v any) error {
+	c.writeMu.Lock()
+	defer c.writeMu.Unlock()
+	return c.Conn.WriteJSON(v)
 }
 
 // Hub manages all connected clients
@@ -47,8 +65,9 @@ type Hub struct {
 
 func newHub(database *db.DB) *Hub {
 	return &Hub{
-		clients:    make(map[*Client]bool),
-		broadcast:  make(chan Message),
+		clients: make(map[*Client]bool),
+		// Buffered so client read loops are not blocked while the hub writes to their socket (avoids deadlock).
+		broadcast:  make(chan Message, 1024),
 		register:   make(chan *Client),
 		unregister: make(chan *Client),
 		database:   database,
@@ -63,17 +82,14 @@ func (h *Hub) run() {
 			h.clients[client] = true
 			h.mutex.Unlock()
 
-			// Send recent message history to the new client
 			go h.sendMessageHistory(client)
 
-			// Notify about new user
 			notification := Message{
 				Username: "System",
 				Content:  fmt.Sprintf("%s joined the chat", client.Username),
 				Type:     "notification",
 			}
 
-			// Save the notification
 			_, err := h.database.SaveMessage(notification.Username, notification.Content, notification.Type)
 			if err != nil {
 				slog.Warn("save join notification", "err", err)
@@ -86,7 +102,6 @@ func (h *Hub) run() {
 			if _, ok := h.clients[client]; ok {
 				delete(h.clients, client)
 
-				// Don't notify if username is not set
 				if client.Username != "Anonymous" {
 					notification := Message{
 						Username: "System",
@@ -94,7 +109,6 @@ func (h *Hub) run() {
 						Type:     "notification",
 					}
 
-					// Save the notification
 					_, err := h.database.SaveMessage(notification.Username, notification.Content, notification.Type)
 					if err != nil {
 						slog.Warn("save leave notification", "err", err)
@@ -108,7 +122,7 @@ func (h *Hub) run() {
 		case message := <-h.broadcast:
 			h.mutex.Lock()
 			for client := range h.clients {
-				err := client.Conn.WriteJSON(message)
+				err := client.writeJSON(message)
 				if err != nil {
 					slog.Warn("broadcast", "err", err)
 					_ = client.Conn.Close()
@@ -121,46 +135,60 @@ func (h *Hub) run() {
 }
 
 func (h *Hub) sendMessageHistory(client *Client) {
-	// Get recent messages from the database
 	messages, err := h.database.GetRecentMessages(50)
 	if err != nil {
 		slog.Warn("message history", "err", err)
 		return
 	}
 
-	// Send message history to the client
 	for _, msg := range messages {
 		message := Message{
 			Username: msg.Username,
 			Content:  msg.Content,
 			Type:     msg.Type,
 		}
-		err := client.Conn.WriteJSON(message)
-		if err != nil {
+		if err := client.writeJSON(message); err != nil {
 			slog.Warn("send history row", "err", err)
 			return
 		}
 	}
 
-	// Send a welcome message
 	welcome := Message{
 		Username: "System",
 		Content:  "Welcome to the chat! You can see the last 50 messages.",
 		Type:     "notification",
 	}
-	if err := client.Conn.WriteJSON(welcome); err != nil {
+	if err := client.writeJSON(welcome); err != nil {
 		slog.Warn("welcome message", "err", err)
 	}
 }
 
-var upgrader = websocket.Upgrader{
-	ReadBufferSize:  1024,
-	WriteBufferSize: 1024,
-	CheckOrigin:     func(r *http.Request) bool { return true },
+func newUpgrader() websocket.Upgrader {
+	return websocket.Upgrader{
+		ReadBufferSize:  1024,
+		WriteBufferSize: 1024,
+		// Origin validated in serveWs (for metrics); allow here after manual check.
+		CheckOrigin: func(r *http.Request) bool { return true },
+	}
+}
+
+func validUsername(s string) bool {
+	if s == "" {
+		return false
+	}
+	return utf8.RuneCountInString(s) <= maxUsernameRunes
+}
+
+func validMessageBody(s string) bool {
+	if s == "" {
+		return false
+	}
+	return utf8.RuneCountInString(s) <= maxMessageRunes
 }
 
 func (c *Client) readMessages() {
 	defer func() {
+		metrics.ConnectedClients.Dec()
 		c.Hub.unregister <- c
 		_ = c.Conn.Close()
 	}()
@@ -175,40 +203,74 @@ func (c *Client) readMessages() {
 			break
 		}
 
-		// If this is the first message, it might be a username setup
 		if msg.Type == "username" {
-			c.Username = msg.Content
+			name := strings.TrimSpace(msg.Content)
+			if !validUsername(name) {
+				slog.Warn("invalid username rejected")
+				continue
+			}
+			c.Username = name
 			continue
 		}
 
-		// Add username to the message
+		if msg.Type != "message" {
+			msg.Type = "message"
+		}
+		body := strings.TrimSpace(msg.Content)
+		if !validMessageBody(body) {
+			slog.Warn("invalid message rejected")
+			continue
+		}
+		msg.Content = body
 		msg.Username = c.Username
 
-		// Save message to database
 		dbMsg, err := c.Hub.database.SaveMessage(msg.Username, msg.Content, msg.Type)
 		if err != nil {
 			slog.Warn("save message", "err", err)
 		} else {
-			// Update message with database fields
 			msg.ID = dbMsg.ID
 			msg.Timestamp = dbMsg.Timestamp
 		}
 
+		metrics.MessagesIngested.Inc()
 		c.Hub.broadcast <- msg
 	}
 }
 
-func serveWs(hub *Hub, w http.ResponseWriter, r *http.Request) {
-	conn, err := upgrader.Upgrade(w, r, nil)
+func clientIP(r *http.Request) string {
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
+		return r.RemoteAddr
+	}
+	return host
+}
+
+func serveWs(hub *Hub, cfg config.Config, up websocket.Upgrader, wsRL *ratelimit.WSUpgrade, w http.ResponseWriter, r *http.Request) {
+	ip := clientIP(r)
+	if wsRL != nil && !wsRL.Allow(ip) {
+		metrics.WSUpgrades.WithLabelValues("rate_limited").Inc()
+		http.Error(w, "too many connections", http.StatusTooManyRequests)
+		return
+	}
+	if !cfg.OriginAllowed(r) {
+		metrics.WSUpgrades.WithLabelValues("denied_origin").Inc()
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+
+	conn, err := up.Upgrade(w, r, nil)
+	if err != nil {
+		metrics.WSUpgrades.WithLabelValues("upgrade_error").Inc()
 		slog.Warn("ws upgrade", "err", err)
 		return
 	}
+	metrics.WSUpgrades.WithLabelValues("ok").Inc()
+	metrics.ConnectedClients.Inc()
 
 	client := &Client{
 		ID:       r.RemoteAddr,
 		Conn:     conn,
-		Username: "Anonymous", // Default username
+		Username: "Anonymous",
 		Hub:      hub,
 	}
 
@@ -217,46 +279,8 @@ func serveWs(hub *Hub, w http.ResponseWriter, r *http.Request) {
 	go client.readMessages()
 }
 
-func enableCORS(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
-
-		if r.Method == "OPTIONS" {
-			w.WriteHeader(http.StatusOK)
-			return
-		}
-
-		next.ServeHTTP(w, r)
-	})
-}
-
-func main() {
-	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo})))
-
-	cfg := config.FromEnv()
-
-	database, err := db.Open(cfg.DBPath)
-	if err != nil {
-		slog.Error("database init failed", "err", err)
-		os.Exit(1)
-	}
-	defer func() { _ = database.Close() }()
-
-	// Create router
-	r := mux.NewRouter()
-
-	// Initialize the hub with the database
-	hub := newHub(database)
-	go hub.run()
-
-	// Set up routes
-	r.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		_, _ = fmt.Fprintf(w, "Chatster API Server")
-	})
-
-	r.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+func healthHandler(database *db.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
 		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 		defer cancel()
 
@@ -279,18 +303,69 @@ func main() {
 			"database": dbStatus,
 			"service":  "chatster",
 		})
+	}
+}
+
+func enableCORS(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+
+		if r.Method == "OPTIONS" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+
+		next.ServeHTTP(w, r)
 	})
+}
+
+func mount(cfg config.Config, hub *Hub, database *db.DB) http.Handler {
+	r := mux.NewRouter()
+	up := newUpgrader()
+
+	var wsRL *ratelimit.WSUpgrade
+	if !cfg.DisableWSRateLimit && cfg.WSUpgradeRPS > 0 {
+		wsRL = ratelimit.NewWSUpgrade(cfg.WSUpgradeRPS, cfg.WSUpgradeBurst)
+	}
+
+	r.Handle("/metrics", promhttp.Handler())
+
+	r.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		_, _ = fmt.Fprintf(w, "Chatster API Server")
+	})
+
+	r.HandleFunc("/health", healthHandler(database))
 
 	r.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
-		serveWs(hub, w, r)
+		serveWs(hub, cfg, up, wsRL, w, r)
 	})
 
-	// Add CORS middleware
 	r.Use(enableCORS)
+	return r
+}
+
+func main() {
+	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo})))
+
+	cfg := config.FromEnv()
+
+	database, err := db.Open(cfg.DBPath)
+	if err != nil {
+		slog.Error("database init failed", "err", err)
+		os.Exit(1)
+	}
+	defer func() { _ = database.Close() }()
+
+	hub := newHub(database)
+	go hub.run()
+
+	handler := mount(cfg, hub, database)
 
 	srv := &http.Server{
 		Addr:    cfg.HTTPAddr,
-		Handler: r,
+		Handler: handler,
 	}
 
 	go func() {
