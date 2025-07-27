@@ -80,3 +80,12 @@ See [OPERATIONS.md](OPERATIONS.md) for health semantics and persistence.
 - Prefer small, focused commits with short subject lines.
 - Open a PR to run CI before merging to `main`.
 - Use the [pull request template](../.github/pull_request_template.md) and linked issue when applicable.
+
+## Further reading
+
+- [Scaling & failure modes](SCALING.md)
+- [Threat model](THREAT_MODEL.md)
+- [Observability](OBSERVABILITY.md)
+- [Frontend engineering](FRONTEND.md)
+- [Non-goals](NON_GOALS.md)
+- [ADR index](adr/README.md)

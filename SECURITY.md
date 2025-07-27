@@ -14,7 +14,7 @@ We aim to acknowledge reports within a few business days.
 
 ## Scope notes
 
-This project is a **demo / reference** stack. It uses permissive WebSocket origins in development and stores data in a local SQLite file. Before exposing it to the internet, review [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and harden configuration (TLS, origins, auth, backups, secrets).
+This project is a **demo / reference** stack. It uses permissive WebSocket origins when `CHATSTER_ALLOWED_ORIGINS` is unset and stores data in a local SQLite file. Before exposing it to the internet, read [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md), [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), and harden configuration (TLS, origins, auth, backups, secrets).
 
 ## Supported versions
 

@@ -8,6 +8,9 @@ Runbook-style notes for operating Chatster beyond local development.
 |----------|---------|-------------|
 | `CHATSTER_HTTP_ADDR` | `:8080` | HTTP listen address |
 | `CHATSTER_DB_PATH` | `./chatster.db` | SQLite database file path |
+| `CHATSTER_ALLOWED_ORIGINS` | _(empty)_ | Comma-separated WebSocket `Origin` values; empty allows all origins |
+| `CHATSTER_WS_UPGRADE_RPS` | `5` | Per-IP WebSocket upgrades per second (`0` disables) |
+| `CHATSTER_WS_UPGRADE_BURST` | `10` | Burst size for the upgrade limiter |
 
 ## Health checks
 
@@ -23,6 +26,10 @@ Example:
 ```
 
 Use this endpoint for Kubernetes liveness/readiness or load balancer probes.
+
+## Metrics
+
+`GET /metrics` exposes **Prometheus** text format (Go runtime collectors plus `chatster_*` counters/gauges). Scrape from your Prometheus server or agent; see [OBSERVABILITY.md](OBSERVABILITY.md) for naming and SLO guidance.
 
 ## Logging
 
@@ -52,6 +59,6 @@ Copy the SQLite file while the process is stopped, or use SQLite’s backup API 
 ## Production hardening (checklist)
 
 - Terminate TLS at the edge; use **`wss://`** for WebSockets.
-- Restrict WebSocket **`CheckOrigin`** to known front-end origins.
+- Set **`CHATSTER_ALLOWED_ORIGINS`** to match your static app origins (see [THREAT_MODEL.md](THREAT_MODEL.md)).
 - Run the API as a non-root user (Dockerfile already uses a dedicated user).
-- Monitor `/health`, log volume, and DB disk growth.
+- Monitor `/health`, **`/metrics`**, log volume, and DB disk growth.

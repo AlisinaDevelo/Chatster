@@ -14,36 +14,47 @@ flowchart LR
     Mux[Gorilla Mux]
     Hub[Hub goroutine]
     DB[(SQLite)]
+    Prom[Prometheus /metrics]
   end
   UI --> WSClient
   WSClient <-->|JSON messages| Mux
   Mux --> Hub
+  Mux --> Prom
   Hub --> DB
 ```
 
 ### Backend (`backend/`)
 
-- **`main.go`**: HTTP server with **graceful shutdown** (SIGINT/SIGTERM), **structured logging** (`log/slog` JSON to stdout), WebSocket upgrade (`/ws`), CORS middleware, and the in-memory **hub** that tracks clients and broadcasts JSON messages.
-- **`internal/config`**: Environment-based configuration (`CHATSTER_HTTP_ADDR`, `CHATSTER_DB_PATH`).
-- **`db/`**: SQLite access — `messages` table, `SaveMessage`, `GetRecentMessages` (last *N* rows, chronological for the client).
+- **`main.go`**: HTTP server with **graceful shutdown**, **`log/slog`** JSON logs, routes, WebSocket upgrade (`/ws`), CORS, **Prometheus `/metrics`**, and the **hub** (`Hub.run`) that registers clients and broadcasts JSON.
+- **`internal/config`**: `CHATSTER_*` environment variables (listen address, DB path, **Origin allowlist**, **WS upgrade rate limit**).
+- **`internal/metrics`**: Prometheus metric definitions (`chatster_*`).
+- **`internal/ratelimit`**: Per-IP token bucket for WebSocket **upgrade** attempts.
+- **`db/`**: SQLite — `messages` table, `SaveMessage`, `GetRecentMessages` with **flexible timestamp parsing** (RFC3339 and legacy layouts).
 
 **Message flow**
 
-1. Client opens `GET /ws` → upgraded to WebSocket.
-2. First client message with `type: "username"` sets display name; it is not stored as a chat row.
-3. Chat messages (`type: "message"`) are saved, then broadcast to all connected clients with `id` and `timestamp` when available.
-4. Join/leave **notifications** are persisted like other rows (except the username handshake).
+1. Client opens `GET /ws` → upgraded (subject to **rate limit** and **`Origin`** policy when configured).
+2. First client message with `type: "username"` sets display name; not stored as a chat row.
+3. Client payloads are validated (**max runes** for username and message body); non-`message` types from clients are coerced to `message` to reduce spoofing of server-only notification types.
+4. Chat messages are saved (when possible), then broadcast with `id` and `timestamp` when available.
+5. Join/leave notifications are persisted like other rows (except the username handshake).
+
+**Concurrency**
+
+- **`broadcast`** uses a **buffered** channel so a client’s read loop does not deadlock when the hub writes back to the same socket (see [adr/0005](adr/0005-broadcast-channel-and-writer-lock.md)).
+- All server writes to a given `*websocket.Conn` go through **`Client.writeJSON`** (mutex) because **gorilla/websocket** permits only one concurrent writer per connection (history replay + hub broadcast can otherwise race).
 
 **Operational endpoints**
 
-- `GET /health` — JSON including `status`, `database`, and `service`; **503** when SQLite ping fails (see [OPERATIONS.md](OPERATIONS.md)).
-- `GET /` — short plain-text banner.
+- `GET /health` — JSON `status` / `database` / `service`; **503** when SQLite ping fails ([OPERATIONS.md](OPERATIONS.md)).
+- `GET /metrics` — Prometheus exposition ([OBSERVABILITY.md](OBSERVABILITY.md)).
+- `GET /` — plain-text banner.
 
 ### Frontend (`frontend/`)
 
-- **`src/api/index.js`**: WebSocket lifecycle — connect, reconnect after close, `disconnect` on React unmount (avoids duplicate sockets under Strict Mode), dev default `ws://127.0.0.1:8080/ws`.
-- **`App.js`**: Connection state, username handshake, chat history list.
-- **Styling**: SCSS per component plus global tokens in `index.css` (dark glass UI, reduced-motion aware).
+- **`src/api/index.js`**: WebSocket lifecycle, reconnect, `disconnect` on unmount.
+- **`App.js`**: Connection state, username handshake, message list.
+- **Styling**: SCSS + tokens; **accessibility** notes in [FRONTEND.md](FRONTEND.md).
 
 ## Configuration
 
@@ -51,16 +62,21 @@ flowchart LR
 |----------|--------|---------|
 | `CHATSTER_HTTP_ADDR` | Backend | Listen address (default `:8080`). |
 | `CHATSTER_DB_PATH` | Backend | SQLite file path (default `./chatster.db`). |
+| `CHATSTER_ALLOWED_ORIGINS` | Backend | Comma-separated `Origin` allowlist; **empty = allow all** (dev). |
+| `CHATSTER_WS_UPGRADE_RPS` / `CHATSTER_WS_UPGRADE_BURST` | Backend | Per-IP WebSocket upgrade limiter (`RPS=0` disables). |
 | `REACT_APP_WS_URL` | Frontend build | Full WebSocket URL override (production). |
 | `REACT_APP_WS_PORT` | Frontend dev | Backend port when using default dev URL. |
 
-See `frontend/.env.example`.
+See `backend/.env.example` and `frontend/.env.example`.
 
 ## Security notes (demo scope)
 
-- WebSocket `CheckOrigin` allows all origins — convenient for local dev; **tighten** before any public deployment.
-- SQLite file path is relative (`./chatster.db`); use a volume or absolute path in production.
+- See **[THREAT_MODEL.md](THREAT_MODEL.md)** for STRIDE-style threats, TLS, abuse, and auth gaps.
+- Set **`CHATSTER_ALLOWED_ORIGINS`** in any shared environment; empty means browsers can connect from any origin.
+- **No authentication** in scope ([adr/0003](adr/0003-no-auth-demo-scope.md)); usernames are display strings only.
 
-## Possible extensions
+## Scaling and extensions
 
-- JWT or session auth, rooms, rate limits, message pagination, and hub-level drain on shutdown.
+- **[SCALING.md](SCALING.md)** — failure order, SQLite limits, multi-instance options.
+- **[NON_GOALS.md](NON_GOALS.md)** — explicit exclusions.
+- Code ideas: JWT/session auth, rooms, hub drain on shutdown, OpenTelemetry ([OBSERVABILITY.md](OBSERVABILITY.md)).
