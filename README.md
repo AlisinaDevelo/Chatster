@@ -1,18 +1,18 @@
 # Chatster
 
-Real-time chat reference stack: **Go** WebSocket hub + **SQLite** history, **React** client, **Docker**-ready, **CI** with lint and coverage.
+Real-time chat reference stack: **Go** WebSocket hub + **SQLite** history, **React** client, **Docker**-ready, **CI** with lint and coverage, **Prometheus** metrics, and **portfolio-grade** docs (scaling, threat model, ADRs).
 
 [![CI](https://github.com/AliSinaDevelo/Chatster/actions/workflows/ci.yml/badge.svg)](https://github.com/AliSinaDevelo/Chatster/actions/workflows/ci.yml)
 
 ## Highlights
 
-- WebSocket broadcast with reconnect and clean teardown on navigation (React Strict Mode safe).
-- Last **50** messages replayed on connect; new messages persisted with timestamps.
-- **`GET /health`** with **SQLite ping** (503 when degraded) for real probes.
-- **Structured JSON logs** (`slog`) and **graceful shutdown** on SIGINT/SIGTERM.
-- **GitHub Actions**: golangci-lint, `go test -race` + coverage artifact, ESLint, Jest, production build.
-- **Dependabot** for Actions, Go, and npm.
-- **Docker Compose** for a one-command demo stack.
+- WebSocket broadcast with reconnect, **buffered hub channel**, **per-client write serialization** (safe gorilla/websocket usage).
+- Last **50** messages replayed on connect; **SQLite timestamp** parsing supports multiple on-disk formats.
+- **`GET /health`** with SQLite ping (503 when degraded); **`GET /metrics`** for Prometheus.
+- **Abuse controls:** max username/message size (runes), per-IP **WebSocket upgrade** rate limit, optional **`Origin`** allowlist.
+- Structured JSON logs (`slog`), graceful shutdown, GitHub Actions (lint, test + coverage, ESLint, build), Dependabot, Docker Compose.
+
+**Frontend** is intentionally a focused CRA SPA—see [docs/FRONTEND.md](docs/FRONTEND.md) for accessibility, performance notes, and how this repo positions **backend/platform** depth vs UI framework churn.
 
 ## Quick start
 
@@ -46,10 +46,13 @@ Open **http://localhost:3000**. Use two browser tabs or windows to test live mes
 |----------|--------|---------|
 | `CHATSTER_HTTP_ADDR` | Backend | Listen address (default `:8080`). |
 | `CHATSTER_DB_PATH` | Backend | SQLite file (default `./chatster.db`). |
+| `CHATSTER_ALLOWED_ORIGINS` | Backend | Comma-separated `Origin` values for WebSocket; **empty = allow all** (dev only). |
+| `CHATSTER_WS_UPGRADE_RPS` | Backend | WS upgrades per IP per second (default `5`; `0` disables). |
+| `CHATSTER_WS_UPGRADE_BURST` | Backend | Token bucket burst for WS upgrades (default `10`). |
 | `REACT_APP_WS_URL` | Frontend build | Full WebSocket URL (production / Docker build args). |
 | `REACT_APP_WS_PORT` | Frontend dev | Backend port when using default dev WebSocket URL. |
 
-Copy `frontend/.env.example` to `frontend/.env.local` when overriding the client.
+See `backend/.env.example` and `frontend/.env.example`.
 
 ## Scripts
 
@@ -58,20 +61,26 @@ Copy `frontend/.env.example` to `frontend/.env.local` when overriding the client
 | `make test` | Backend tests + frontend tests (CI mode). |
 | `make lint` | golangci-lint + ESLint (requires golangci-lint installed locally). |
 | `make docker-up` | `docker compose up --build`. |
-| `cd backend && go test -race ./...` | Go tests only. |
+| `cd backend && go test -race ./...` | Go tests (includes HTTP + WebSocket integration tests). |
 | `cd frontend && npm run test:ci` | Jest once. |
 | `cd frontend && npm run build` | Optimized static build. |
 
 ## Documentation
 
-- [Architecture](docs/ARCHITECTURE.md) — components, data flow, security notes.
+- [Architecture](docs/ARCHITECTURE.md) — components, data flow.
+- [Scaling & failure modes](docs/SCALING.md) — what breaks first, what to do next.
+- [Threat model](docs/THREAT_MODEL.md) — security narrative and controls.
+- [Observability](docs/OBSERVABILITY.md) — metrics, logs, SLO sketch, tracing path.
+- [Frontend engineering](docs/FRONTEND.md) — a11y, perf budget, positioning.
+- [Non-goals](docs/NON_GOALS.md) — explicit out-of-scope items.
+- [ADR index](docs/adr/README.md) — architecture decisions.
 - [Workflows](docs/WORKFLOWS.md) — CI, Dependabot, local and Docker dev.
-- [Operations](docs/OPERATIONS.md) — health checks, logging, production checklist.
+- [Operations](docs/OPERATIONS.md) — probes, `/metrics`, checklist.
 - [Contributing](CONTRIBUTING.md) — PRs, `make lint`, code of conduct.
 
 ## Stack
 
-Go 1.22 · Gorilla Mux & WebSocket · SQLite (CGO) · React 18 · Sass · Docker · GitHub Actions.
+Go 1.22 · Gorilla Mux & WebSocket · SQLite (CGO) · Prometheus · React 18 · Sass · Docker · GitHub Actions.
 
 ## License
 
