@@ -6,6 +6,32 @@
   display: flex;
   flex-direction: column;
   gap: 20px;
+  position: relative;
+}
+
+.skip-link {
+  position: absolute;
+  left: -10000px;
+  top: 0;
+  z-index: 100;
+  padding: 10px 16px;
+  background: var(--accent);
+  color: var(--bg-deep);
+  font-weight: 600;
+  text-decoration: none;
+  border-radius: 8px;
+}
+
+.skip-link:focus {
+  left: clamp(16px, 4vw, 32px);
+  top: clamp(16px, 4vw, 32px);
+}
+
+.chat-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 
 .chat-container {

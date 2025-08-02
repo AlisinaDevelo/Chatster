@@ -14,24 +14,34 @@ const ChatInput = ({ sendMessage, hasUsername, connectionStatus }) => {
   };
   
   const canSend = connectionStatus === 'connected';
+  const inputId = 'chat-message-input';
+  const hintId = 'chat-username-hint';
 
   return (
     <div className="chat-input">
       <form onSubmit={handleSubmit}>
+        <label htmlFor={inputId} className="visually-hidden">
+          {hasUsername ? 'Chat message' : 'Choose a display name'}
+        </label>
         <input
+          id={inputId}
           type="text"
           value={message}
           onChange={(e) => setMessage(e.target.value)}
-          placeholder={hasUsername ? "Type your message..." : "Enter your username..."}
+          placeholder={hasUsername ? 'Type your message…' : 'Enter your username…'}
           disabled={!canSend}
+          autoComplete="off"
           autoFocus
+          aria-describedby={hasUsername ? undefined : hintId}
         />
         <button type="submit" disabled={message.trim() === '' || !canSend}>
           {hasUsername ? 'Send' : 'Set Username'}
         </button>
       </form>
       {!hasUsername && (
-        <p className="hint">Please enter your username to start chatting</p>
+        <p id={hintId} className="hint">
+          Please enter your username to start chatting
+        </p>
       )}
     </div>
   );

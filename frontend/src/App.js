@@ -52,27 +52,32 @@ function App() {
 
   return (
     <div className="App">
+      <a href="#main-content" className="skip-link">
+        Skip to chat
+      </a>
       <Header connectionStatus={connectionStatus} />
-      
-      <div className="chat-container">
-        {connectionStatus !== 'connected' && (
-          <div className="connection-status" role="status">
-            {connectionStatus === 'connecting' && 'Connecting…'}
-            {connectionStatus === 'disconnected' && 'Reconnecting…'}
-            {connectionStatus === 'error' && 'Connection error — retrying…'}
-          </div>
-        )}
-        
-        <ChatHistory chatHistory={chatHistory} />
-        <ChatInput
-          sendMessage={send}
-          hasUsername={hasUsername}
-          connectionStatus={connectionStatus}
-        />
-      </div>
-      
+
+      <main id="main-content" className="chat-main" tabIndex={-1}>
+        <div className="chat-container">
+          {connectionStatus !== 'connected' && (
+            <div className="connection-status" role="status" aria-live="polite">
+              {connectionStatus === 'connecting' && 'Connecting…'}
+              {connectionStatus === 'disconnected' && 'Reconnecting…'}
+              {connectionStatus === 'error' && 'Connection error — retrying…'}
+            </div>
+          )}
+
+          <ChatHistory chatHistory={chatHistory} />
+          <ChatInput
+            sendMessage={send}
+            hasUsername={hasUsername}
+            connectionStatus={connectionStatus}
+          />
+        </div>
+      </main>
+
       <footer className="footer">
-        <p>Chatster © {new Date().getFullYear()} - Real-time chat application</p>
+        <p>Chatster © {new Date().getFullYear()} — Real-time chat application</p>
       </footer>
     </div>
   );

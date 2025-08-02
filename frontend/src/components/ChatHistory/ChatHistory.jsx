@@ -50,13 +50,21 @@ const ChatHistory = ({ chatHistory }) => {
   };
   
   return (
-    <div className="chat-history">
+    <section className="chat-history" aria-labelledby="chat-heading">
       <div className="chat-header">
-        <h2>Chat History</h2>
-        <span className="message-count">{chatHistory.length} messages</span>
+        <h2 id="chat-heading">Chat History</h2>
+        <span className="message-count" aria-live="polite">
+          {chatHistory.length} messages
+        </span>
       </div>
-      
-      <div className="messages">
+
+      <div
+        className="messages"
+        role="log"
+        aria-live="polite"
+        aria-relevant="additions"
+        aria-label="Chat messages"
+      >
         {chatHistory.length > 0 ? renderMessages() : (
           <div className="no-messages">
             No messages yet. Start the conversation!
@@ -64,7 +72,7 @@ const ChatHistory = ({ chatHistory }) => {
         )}
         <div ref={messagesEndRef} />
       </div>
-    </div>
+    </section>
   );
 };
 
