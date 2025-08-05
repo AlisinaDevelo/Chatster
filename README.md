@@ -4,6 +4,10 @@ Real-time chat reference stack: **Go** WebSocket hub + **SQLite** history, **Rea
 
 [![CI](https://github.com/AliSinaDevelo/Chatster/actions/workflows/ci.yml/badge.svg)](https://github.com/AliSinaDevelo/Chatster/actions/workflows/ci.yml)
 
+## Preview
+
+![Chatster UI — dark glass theme, live connection status, chat history, and composer](docs/assets/chatster-ui.png)
+
 ## Highlights
 
 - WebSocket broadcast with reconnect, **buffered hub channel**, **per-client write serialization** (safe gorilla/websocket usage).
