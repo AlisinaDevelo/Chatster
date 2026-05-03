@@ -5,7 +5,7 @@ go 1.22.1
 require (
 	github.com/gorilla/mux v1.8.1
 	github.com/gorilla/websocket v1.5.3
-	github.com/mattn/go-sqlite3 v1.14.28
+	github.com/mattn/go-sqlite3 v1.14.44
 	github.com/prometheus/client_golang v1.20.5
 	golang.org/x/time v0.9.0
 )
