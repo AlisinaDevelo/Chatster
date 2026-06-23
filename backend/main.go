@@ -40,17 +40,30 @@ type Message struct {
 
 // Client represents a connected client
 type Client struct {
-	ID       string
-	Conn     *websocket.Conn
-	Username string
-	Hub      *Hub
-	writeMu  sync.Mutex // gorilla/websocket allows one writer at a time
+	ID         string
+	Conn       *websocket.Conn
+	Username   string
+	Hub        *Hub
+	writeMu    sync.Mutex // gorilla/websocket allows one writer at a time
+	usernameMu sync.RWMutex
 }
 
 func (c *Client) writeJSON(v any) error {
 	c.writeMu.Lock()
 	defer c.writeMu.Unlock()
 	return c.Conn.WriteJSON(v)
+}
+
+func (c *Client) setUsername(username string) {
+	c.usernameMu.Lock()
+	defer c.usernameMu.Unlock()
+	c.Username = username
+}
+
+func (c *Client) username() string {
+	c.usernameMu.RLock()
+	defer c.usernameMu.RUnlock()
+	return c.Username
 }
 
 // Hub manages all connected clients
@@ -84,9 +97,10 @@ func (h *Hub) run() {
 
 			go h.sendMessageHistory(client)
 
+			username := client.username()
 			notification := Message{
 				Username: "System",
-				Content:  fmt.Sprintf("%s joined the chat", client.Username),
+				Content:  fmt.Sprintf("%s joined the chat", username),
 				Type:     "notification",
 			}
 
@@ -102,10 +116,11 @@ func (h *Hub) run() {
 			if _, ok := h.clients[client]; ok {
 				delete(h.clients, client)
 
-				if client.Username != "Anonymous" {
+				username := client.username()
+				if username != "Anonymous" {
 					notification := Message{
 						Username: "System",
-						Content:  fmt.Sprintf("%s left the chat", client.Username),
+						Content:  fmt.Sprintf("%s left the chat", username),
 						Type:     "notification",
 					}
 
@@ -209,7 +224,7 @@ func (c *Client) readMessages() {
 				slog.Warn("invalid username rejected")
 				continue
 			}
-			c.Username = name
+			c.setUsername(name)
 			continue
 		}
 
@@ -222,7 +237,7 @@ func (c *Client) readMessages() {
 			continue
 		}
 		msg.Content = body
-		msg.Username = c.Username
+		msg.Username = c.username()
 
 		dbMsg, err := c.Hub.database.SaveMessage(msg.Username, msg.Content, msg.Type)
 		if err != nil {
