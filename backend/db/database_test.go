@@ -25,6 +25,44 @@ func TestNewAndSaveMessage(t *testing.T) {
 	}
 }
 
+func TestOpenConfiguresSQLiteForSingleNodeRuntime(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "runtime.db")
+	database, err := Open(path)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	t.Cleanup(func() { _ = database.Close() })
+
+	stats := database.Stats()
+	if stats.MaxOpenConnections != 1 {
+		t.Fatalf("MaxOpenConnections: got %d want 1", stats.MaxOpenConnections)
+	}
+
+	var journalMode string
+	if err := database.QueryRow("PRAGMA journal_mode").Scan(&journalMode); err != nil {
+		t.Fatalf("journal_mode: %v", err)
+	}
+	if journalMode != "wal" {
+		t.Fatalf("journal_mode: got %q want %q", journalMode, "wal")
+	}
+
+	var foreignKeys int
+	if err := database.QueryRow("PRAGMA foreign_keys").Scan(&foreignKeys); err != nil {
+		t.Fatalf("foreign_keys: %v", err)
+	}
+	if foreignKeys != 1 {
+		t.Fatalf("foreign_keys: got %d want 1", foreignKeys)
+	}
+
+	var busyTimeout int
+	if err := database.QueryRow("PRAGMA busy_timeout").Scan(&busyTimeout); err != nil {
+		t.Fatalf("busy_timeout: %v", err)
+	}
+	if busyTimeout != sqliteBusyTimeoutMS {
+		t.Fatalf("busy_timeout: got %d want %d", busyTimeout, sqliteBusyTimeoutMS)
+	}
+}
+
 func TestSaveMessageSkipsUsernameTypePersistence(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "test.db")
 	database, err := Open(path)

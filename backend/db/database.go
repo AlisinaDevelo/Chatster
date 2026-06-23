@@ -2,11 +2,14 @@ package db
 
 import (
 	"database/sql"
+	"fmt"
 	"log"
 	"time"
 
 	_ "github.com/mattn/go-sqlite3" // Driver registers with database/sql as "sqlite3".
 )
+
+const sqliteBusyTimeoutMS = 5000
 
 // Message represents a chat message
 type Message struct {
@@ -34,6 +37,14 @@ func Open(path string) (*DB, error) {
 		return nil, err
 	}
 
+	database.SetMaxOpenConns(1)
+	database.SetMaxIdleConns(1)
+
+	if err := configureSQLite(database); err != nil {
+		_ = database.Close()
+		return nil, err
+	}
+
 	if err := database.Ping(); err != nil {
 		_ = database.Close()
 		return nil, err
@@ -45,6 +56,21 @@ func Open(path string) (*DB, error) {
 	}
 
 	return &DB{database}, nil
+}
+
+func configureSQLite(db *sql.DB) error {
+	pragmas := []string{
+		"PRAGMA foreign_keys = ON",
+		"PRAGMA journal_mode = WAL",
+		"PRAGMA synchronous = NORMAL",
+		fmt.Sprintf("PRAGMA busy_timeout = %d", sqliteBusyTimeoutMS),
+	}
+	for _, pragma := range pragmas {
+		if _, err := db.Exec(pragma); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // initDB creates the tables if they don't exist
