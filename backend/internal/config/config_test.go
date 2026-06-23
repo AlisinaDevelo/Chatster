@@ -25,6 +25,12 @@ func TestFromEnvDefaults(t *testing.T) {
 	if cfg.WSUpgradeRPS != defaultWSUpgradeRPS {
 		t.Fatalf("WSUpgradeRPS: got %v want %v", cfg.WSUpgradeRPS, defaultWSUpgradeRPS)
 	}
+	if cfg.DisableMessageRateLimit {
+		t.Fatal("expected message rate limit enabled by default")
+	}
+	if cfg.MessageRPS != defaultMessageRPS {
+		t.Fatalf("MessageRPS: got %v want %v", cfg.MessageRPS, defaultMessageRPS)
+	}
 }
 
 func TestFromEnvOverride(t *testing.T) {
@@ -33,6 +39,8 @@ func TestFromEnvOverride(t *testing.T) {
 	t.Setenv("CHATSTER_ALLOWED_ORIGINS", " https://a.test , https://b.test ")
 	t.Setenv("CHATSTER_WS_UPGRADE_RPS", "12")
 	t.Setenv("CHATSTER_WS_UPGRADE_BURST", "3")
+	t.Setenv("CHATSTER_MESSAGE_RPS", "8")
+	t.Setenv("CHATSTER_MESSAGE_BURST", "4")
 	cfg := FromEnv()
 	if cfg.HTTPAddr != ":9999" || cfg.DBPath != "/tmp/x.db" {
 		t.Fatalf("unexpected cfg: %+v", cfg)
@@ -43,6 +51,9 @@ func TestFromEnvOverride(t *testing.T) {
 	if cfg.WSUpgradeRPS != 12 || cfg.WSUpgradeBurst != 3 {
 		t.Fatalf("rate: rps=%v burst=%v", cfg.WSUpgradeRPS, cfg.WSUpgradeBurst)
 	}
+	if cfg.MessageRPS != 8 || cfg.MessageBurst != 4 {
+		t.Fatalf("message rate: rps=%v burst=%v", cfg.MessageRPS, cfg.MessageBurst)
+	}
 }
 
 func TestFromEnvWSRateDisabled(t *testing.T) {
@@ -50,6 +61,14 @@ func TestFromEnvWSRateDisabled(t *testing.T) {
 	cfg := FromEnv()
 	if !cfg.DisableWSRateLimit {
 		t.Fatal("want rate limit disabled")
+	}
+}
+
+func TestFromEnvMessageRateDisabled(t *testing.T) {
+	t.Setenv("CHATSTER_MESSAGE_RPS", "0")
+	cfg := FromEnv()
+	if !cfg.DisableMessageRateLimit {
+		t.Fatal("want message rate limit disabled")
 	}
 }
 

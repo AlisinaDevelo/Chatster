@@ -235,19 +235,21 @@ func TestWebSocketRejectsInvalidMessages(t *testing.T) {
 	if err := c.WriteJSON(Message{Type: "username", Content: "alice"}); err != nil {
 		t.Fatal(err)
 	}
-	before := messageCount(t, database)
 
 	if err := c.WriteJSON(Message{Type: "message", Content: "   "}); err != nil {
 		t.Fatal(err)
 	}
-	if err := c.WriteJSON(Message{Type: "message", Content: strings.Repeat("x", maxMessageRunes+1)}); err != nil {
+	oversizedBody := strings.Repeat("x", maxMessageRunes+1)
+	if err := c.WriteJSON(Message{Type: "message", Content: oversizedBody}); err != nil {
 		t.Fatal(err)
 	}
 
 	time.Sleep(200 * time.Millisecond)
-	after := messageCount(t, database)
-	if after != before {
-		t.Fatalf("invalid messages should not persist: before=%d after=%d", before, after)
+	if got := messageContentCount(t, database, ""); got != 0 {
+		t.Fatalf("empty message should not persist, got %d", got)
+	}
+	if got := messageContentCount(t, database, oversizedBody); got != 0 {
+		t.Fatalf("oversized message should not persist, got %d", got)
 	}
 }
 
@@ -304,6 +306,40 @@ func TestWebSocketCoercesClientMessageType(t *testing.T) {
 	}
 }
 
+func TestWebSocketMessageRateLimit(t *testing.T) {
+	cfg, database, hub, cleanup := testStack(t)
+	defer cleanup()
+	cfg.MessageRPS = 0.001
+	cfg.MessageBurst = 1
+
+	srv := httptest.NewServer(mount(cfg, hub, database))
+	defer srv.Close()
+
+	c := mustDialWS(t, srv)
+	defer func() { _ = c.Close() }()
+
+	if err := c.WriteJSON(Message{Type: "username", Content: "alice"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.WriteJSON(Message{Type: "message", Content: "first"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.WriteJSON(Message{Type: "message", Content: "second"}); err != nil {
+		t.Fatal(err)
+	}
+
+	readMatchingMessage(t, c, func(m Message) bool {
+		return m.Type == "notification" && strings.Contains(m.Content, "too quickly")
+	})
+
+	if got := messageContentCount(t, database, "first"); got != 1 {
+		t.Fatalf("first message should persist once, got %d", got)
+	}
+	if got := messageContentCount(t, database, "second"); got != 0 {
+		t.Fatalf("rate-limited message should not persist, got %d", got)
+	}
+}
+
 func wsURL(srv *httptest.Server) string {
 	return "ws" + strings.TrimPrefix(srv.URL, "http") + "/ws"
 }
@@ -334,11 +370,11 @@ func readMatchingMessage(t *testing.T, c *websocket.Conn, match func(Message) bo
 	}
 }
 
-func messageCount(t *testing.T, database *db.DB) int {
+func messageContentCount(t *testing.T, database *db.DB, content string) int {
 	t.Helper()
 	var count int
-	if err := database.QueryRow("SELECT COUNT(*) FROM messages").Scan(&count); err != nil {
-		t.Fatalf("count messages: %v", err)
+	if err := database.QueryRow("SELECT COUNT(*) FROM messages WHERE content = ?", content).Scan(&count); err != nil {
+		t.Fatalf("count messages by content: %v", err)
 	}
 	return count
 }

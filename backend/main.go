@@ -22,6 +22,7 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"golang.org/x/time/rate"
 )
 
 const (
@@ -51,6 +52,7 @@ type Client struct {
 	Hub        *Hub
 	writeMu    sync.Mutex // gorilla/websocket allows one writer at a time
 	usernameMu sync.RWMutex
+	msgLimiter *rate.Limiter
 }
 
 func (c *Client) writeJSON(v any) error {
@@ -215,6 +217,21 @@ func validMessageBody(s string) bool {
 	return utf8.RuneCountInString(s) <= maxMessageRunes
 }
 
+func (c *Client) allowMessage() bool {
+	return c.msgLimiter == nil || c.msgLimiter.Allow()
+}
+
+func (c *Client) sendRateLimitNotice() {
+	notice := Message{
+		Username: "System",
+		Content:  "You are sending messages too quickly. Please slow down.",
+		Type:     "notification",
+	}
+	if err := c.writeJSON(notice); err != nil {
+		slog.Warn("send rate limit notice", "err", err)
+	}
+}
+
 func (c *Client) startHeartbeat(done <-chan struct{}) {
 	ticker := time.NewTicker(pingPeriod)
 	defer ticker.Stop()
@@ -281,6 +298,11 @@ func (c *Client) readMessages() {
 			slog.Warn("invalid message rejected")
 			continue
 		}
+		if !c.allowMessage() {
+			slog.Warn("message rate limited")
+			c.sendRateLimitNotice()
+			continue
+		}
 		msg.Content = body
 		msg.Username = c.username()
 
@@ -328,15 +350,27 @@ func serveWs(hub *Hub, cfg config.Config, up websocket.Upgrader, wsRL *ratelimit
 	metrics.ConnectedClients.Inc()
 
 	client := &Client{
-		ID:       r.RemoteAddr,
-		Conn:     conn,
-		Username: "Anonymous",
-		Hub:      hub,
+		ID:         r.RemoteAddr,
+		Conn:       conn,
+		Username:   "Anonymous",
+		Hub:        hub,
+		msgLimiter: newMessageLimiter(cfg),
 	}
 
 	hub.register <- client
 
 	go client.readMessages()
+}
+
+func newMessageLimiter(cfg config.Config) *rate.Limiter {
+	if cfg.DisableMessageRateLimit || cfg.MessageRPS <= 0 {
+		return nil
+	}
+	burst := cfg.MessageBurst
+	if burst < 1 {
+		burst = 1
+	}
+	return rate.NewLimiter(rate.Limit(cfg.MessageRPS), burst)
 }
 
 func healthHandler(database *db.DB) http.HandlerFunc {

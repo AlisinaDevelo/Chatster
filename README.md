@@ -53,6 +53,8 @@ Open **http://localhost:3000**. Use two browser tabs or windows to test live mes
 | `CHATSTER_ALLOWED_ORIGINS` | Backend | Comma-separated `Origin` values for WebSocket; **empty = allow all** (dev only). |
 | `CHATSTER_WS_UPGRADE_RPS` | Backend | WS upgrades per IP per second (default `5`; `0` disables). |
 | `CHATSTER_WS_UPGRADE_BURST` | Backend | Token bucket burst for WS upgrades (default `10`). |
+| `CHATSTER_MESSAGE_RPS` | Backend | Chat messages per client per second (default `5`; `0` disables). |
+| `CHATSTER_MESSAGE_BURST` | Backend | Token bucket burst for per-client message sends (default `10`). |
 | `REACT_APP_WS_URL` | Frontend build | Full WebSocket URL (production / Docker build args). |
 | `REACT_APP_WS_PORT` | Frontend dev | Backend port when using default dev WebSocket URL. |
 

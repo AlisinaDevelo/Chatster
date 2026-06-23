@@ -26,7 +26,7 @@ flowchart LR
 ### Backend (`backend/`)
 
 - **`main.go`**: HTTP server with **graceful shutdown**, **`log/slog`** JSON logs, routes, WebSocket upgrade (`/ws`), CORS, **Prometheus `/metrics`**, and the **hub** (`Hub.run`) that registers clients and broadcasts JSON.
-- **`internal/config`**: `CHATSTER_*` environment variables (listen address, DB path, **Origin allowlist**, **WS upgrade rate limit**).
+- **`internal/config`**: `CHATSTER_*` environment variables (listen address, DB path, **Origin allowlist**, **WS upgrade and message rate limits**).
 - **`internal/metrics`**: Prometheus metric definitions (`chatster_*`).
 - **`internal/ratelimit`**: Per-IP token bucket for WebSocket **upgrade** attempts.
 - **`db/`**: SQLite — `messages` table, `SaveMessage`, `GetRecentMessages` with **flexible timestamp parsing** (RFC3339 and legacy layouts).
@@ -64,6 +64,7 @@ flowchart LR
 | `CHATSTER_DB_PATH` | Backend | SQLite file path (default `./chatster.db`). |
 | `CHATSTER_ALLOWED_ORIGINS` | Backend | Comma-separated `Origin` allowlist; **empty = allow all** (dev). |
 | `CHATSTER_WS_UPGRADE_RPS` / `CHATSTER_WS_UPGRADE_BURST` | Backend | Per-IP WebSocket upgrade limiter (`RPS=0` disables). |
+| `CHATSTER_MESSAGE_RPS` / `CHATSTER_MESSAGE_BURST` | Backend | Per-client chat message limiter (`RPS=0` disables). |
 | `REACT_APP_WS_URL` | Frontend build | Full WebSocket URL override (production). |
 | `REACT_APP_WS_PORT` | Frontend dev | Backend port when using default dev URL. |
 

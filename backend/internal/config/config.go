@@ -8,20 +8,25 @@ import (
 )
 
 const (
-	defaultHTTPAddr        = ":8080"
-	defaultDBPath          = "./chatster.db"
-	defaultWSUpgradeRPS    = 5.0
-	defaultWSUpgradeBurst  = 10
+	defaultHTTPAddr       = ":8080"
+	defaultDBPath         = "./chatster.db"
+	defaultWSUpgradeRPS   = 5.0
+	defaultWSUpgradeBurst = 10
+	defaultMessageRPS     = 5.0
+	defaultMessageBurst   = 10
 )
 
 // Config holds process configuration loaded from the environment.
 type Config struct {
-	HTTPAddr           string
-	DBPath             string
-	AllowedOrigins     []string
-	WSUpgradeRPS       float64
-	WSUpgradeBurst     int
-	DisableWSRateLimit bool
+	HTTPAddr                string
+	DBPath                  string
+	AllowedOrigins          []string
+	WSUpgradeRPS            float64
+	WSUpgradeBurst          int
+	DisableWSRateLimit      bool
+	MessageRPS              float64
+	MessageBurst            int
+	DisableMessageRateLimit bool
 }
 
 // FromEnv reads configuration from environment variables with safe defaults.
@@ -31,6 +36,8 @@ type Config struct {
 // CHATSTER_ALLOWED_ORIGINS — comma-separated WebSocket Origin allowlist; empty = allow all (dev-friendly).
 // CHATSTER_WS_UPGRADE_RPS — max WS upgrades per IP per second (default 5); "0" disables limiting.
 // CHATSTER_WS_UPGRADE_BURST — token bucket burst for WS upgrades (default 10).
+// CHATSTER_MESSAGE_RPS — max chat messages per client per second (default 5); "0" disables limiting.
+// CHATSTER_MESSAGE_BURST — token bucket burst for chat messages (default 10).
 func FromEnv() Config {
 	cfg := Config{
 		HTTPAddr:       strings.TrimSpace(os.Getenv("CHATSTER_HTTP_ADDR")),
@@ -38,6 +45,8 @@ func FromEnv() Config {
 		AllowedOrigins: splitCSV(os.Getenv("CHATSTER_ALLOWED_ORIGINS")),
 		WSUpgradeRPS:   defaultWSUpgradeRPS,
 		WSUpgradeBurst: defaultWSUpgradeBurst,
+		MessageRPS:     defaultMessageRPS,
+		MessageBurst:   defaultMessageBurst,
 	}
 
 	if cfg.HTTPAddr == "" {
@@ -65,6 +74,27 @@ func FromEnv() Config {
 	if v := strings.TrimSpace(os.Getenv("CHATSTER_WS_UPGRADE_BURST")); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 {
 			cfg.WSUpgradeBurst = n
+		}
+	}
+
+	switch v := strings.TrimSpace(os.Getenv("CHATSTER_MESSAGE_RPS")); v {
+	case "0":
+		cfg.DisableMessageRateLimit = true
+	case "":
+		// defaults
+	default:
+		if f, err := strconv.ParseFloat(v, 64); err == nil {
+			if f <= 0 {
+				cfg.DisableMessageRateLimit = true
+			} else {
+				cfg.MessageRPS = f
+			}
+		}
+	}
+
+	if v := strings.TrimSpace(os.Getenv("CHATSTER_MESSAGE_BURST")); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			cfg.MessageBurst = n
 		}
 	}
 

@@ -11,6 +11,8 @@ Runbook-style notes for operating Chatster beyond local development.
 | `CHATSTER_ALLOWED_ORIGINS` | _(empty)_ | Comma-separated WebSocket `Origin` values; empty allows all origins |
 | `CHATSTER_WS_UPGRADE_RPS` | `5` | Per-IP WebSocket upgrades per second (`0` disables) |
 | `CHATSTER_WS_UPGRADE_BURST` | `10` | Burst size for the upgrade limiter |
+| `CHATSTER_MESSAGE_RPS` | `5` | Per-client chat messages per second (`0` disables) |
+| `CHATSTER_MESSAGE_BURST` | `10` | Burst size for the message limiter |
 
 ## Health checks
 
