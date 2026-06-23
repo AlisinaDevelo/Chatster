@@ -77,6 +77,7 @@ See `backend/.env.example` and `frontend/.env.example`.
 - [Scaling & failure modes](docs/SCALING.md) — what breaks first, what to do next.
 - [Threat model](docs/THREAT_MODEL.md) — security narrative and controls.
 - [Observability](docs/OBSERVABILITY.md) — metrics, logs, SLO sketch, tracing path.
+- [Load testing](docs/LOAD_TESTING.md) — reproducible WebSocket load harness.
 - [Frontend engineering](docs/FRONTEND.md) — a11y, perf budget, positioning.
 - [Non-goals](docs/NON_GOALS.md) — explicit out-of-scope items.
 - [ADR index](docs/adr/README.md) — architecture decisions.
