@@ -143,3 +143,173 @@ func TestWebSocketUsernameAndMessage(t *testing.T) {
 		}
 	}
 }
+
+func TestWebSocketRejectsDeniedOrigin(t *testing.T) {
+	cfg, database, hub, cleanup := testStack(t)
+	defer cleanup()
+	cfg.AllowedOrigins = []string{"https://chatster.example"}
+
+	srv := httptest.NewServer(mount(cfg, hub, database))
+	defer srv.Close()
+
+	headers := http.Header{}
+	headers.Set("Origin", "https://evil.example")
+	c, resp, err := websocket.DefaultDialer.Dial(wsURL(srv), headers)
+	if err == nil {
+		_ = c.Close()
+		t.Fatal("expected denied origin to fail websocket dial")
+	}
+	if resp == nil {
+		t.Fatal("expected HTTP response for denied origin")
+	}
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("want 403, got %d", resp.StatusCode)
+	}
+}
+
+func TestWebSocketUpgradeRateLimit(t *testing.T) {
+	cfg, database, hub, cleanup := testStack(t)
+	defer cleanup()
+	cfg.DisableWSRateLimit = false
+	cfg.WSUpgradeRPS = 0.001
+	cfg.WSUpgradeBurst = 1
+
+	srv := httptest.NewServer(mount(cfg, hub, database))
+	defer srv.Close()
+
+	first, resp, err := websocket.DefaultDialer.Dial(wsURL(srv), nil)
+	if err != nil {
+		t.Fatalf("first dial: %v (resp=%v)", err, resp)
+	}
+	defer func() { _ = first.Close() }()
+
+	second, resp, err := websocket.DefaultDialer.Dial(wsURL(srv), nil)
+	if err == nil {
+		_ = second.Close()
+		t.Fatal("expected second dial to be rate limited")
+	}
+	if resp == nil {
+		t.Fatal("expected HTTP response for rate-limited dial")
+	}
+	if resp.StatusCode != http.StatusTooManyRequests {
+		t.Fatalf("want 429, got %d", resp.StatusCode)
+	}
+}
+
+func TestWebSocketRejectedUsernameKeepsAnonymousIdentity(t *testing.T) {
+	cfg, database, hub, cleanup := testStack(t)
+	defer cleanup()
+
+	srv := httptest.NewServer(mount(cfg, hub, database))
+	defer srv.Close()
+
+	c := mustDialWS(t, srv)
+	defer func() { _ = c.Close() }()
+
+	if err := c.WriteJSON(Message{Type: "username", Content: ""}); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.WriteJSON(Message{Type: "message", Content: "still here"}); err != nil {
+		t.Fatal(err)
+	}
+
+	msg := readMatchingMessage(t, c, func(m Message) bool {
+		return m.Type == "message" && m.Content == "still here"
+	})
+	if msg.Username != "Anonymous" {
+		t.Fatalf("invalid username should keep anonymous identity, got %q", msg.Username)
+	}
+}
+
+func TestWebSocketRejectsInvalidMessages(t *testing.T) {
+	cfg, database, hub, cleanup := testStack(t)
+	defer cleanup()
+
+	srv := httptest.NewServer(mount(cfg, hub, database))
+	defer srv.Close()
+
+	c := mustDialWS(t, srv)
+	defer func() { _ = c.Close() }()
+
+	if err := c.WriteJSON(Message{Type: "username", Content: "alice"}); err != nil {
+		t.Fatal(err)
+	}
+	before := messageCount(t, database)
+
+	if err := c.WriteJSON(Message{Type: "message", Content: "   "}); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.WriteJSON(Message{Type: "message", Content: strings.Repeat("x", maxMessageRunes+1)}); err != nil {
+		t.Fatal(err)
+	}
+
+	time.Sleep(200 * time.Millisecond)
+	after := messageCount(t, database)
+	if after != before {
+		t.Fatalf("invalid messages should not persist: before=%d after=%d", before, after)
+	}
+}
+
+func TestWebSocketCoercesClientMessageType(t *testing.T) {
+	cfg, database, hub, cleanup := testStack(t)
+	defer cleanup()
+
+	srv := httptest.NewServer(mount(cfg, hub, database))
+	defer srv.Close()
+
+	c := mustDialWS(t, srv)
+	defer func() { _ = c.Close() }()
+
+	if err := c.WriteJSON(Message{Type: "username", Content: "alice"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.WriteJSON(Message{Type: "notification", Content: "spoof"}); err != nil {
+		t.Fatal(err)
+	}
+
+	msg := readMatchingMessage(t, c, func(m Message) bool {
+		return m.Content == "spoof"
+	})
+	if msg.Type != "message" {
+		t.Fatalf("client-supplied non-message type should be coerced, got %q", msg.Type)
+	}
+}
+
+func wsURL(srv *httptest.Server) string {
+	return "ws" + strings.TrimPrefix(srv.URL, "http") + "/ws"
+}
+
+func mustDialWS(t *testing.T, srv *httptest.Server) *websocket.Conn {
+	t.Helper()
+	c, resp, err := websocket.DefaultDialer.Dial(wsURL(srv), nil)
+	if err != nil {
+		t.Fatalf("dial: %v (resp=%v)", err, resp)
+	}
+	return c
+}
+
+func readMatchingMessage(t *testing.T, c *websocket.Conn, match func(Message) bool) Message {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		if err := c.SetReadDeadline(deadline); err != nil {
+			t.Fatal(err)
+		}
+		var m Message
+		if err := c.ReadJSON(&m); err != nil {
+			t.Fatalf("read matching message: %v", err)
+		}
+		if match(m) {
+			return m
+		}
+	}
+}
+
+func messageCount(t *testing.T, database *db.DB) int {
+	t.Helper()
+	var count int
+	if err := database.QueryRow("SELECT COUNT(*) FROM messages").Scan(&count); err != nil {
+		t.Fatalf("count messages: %v", err)
+	}
+	return count
+}
