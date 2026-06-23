@@ -27,6 +27,11 @@ import (
 const (
 	maxUsernameRunes = 64
 	maxMessageRunes  = 4000
+
+	maxWebSocketReadBytes = 32 * 1024
+	writeWait             = 10 * time.Second
+	pongWait              = 60 * time.Second
+	pingPeriod            = (pongWait * 9) / 10
 )
 
 // Message represents a chat message
@@ -51,7 +56,16 @@ type Client struct {
 func (c *Client) writeJSON(v any) error {
 	c.writeMu.Lock()
 	defer c.writeMu.Unlock()
+	if err := c.Conn.SetWriteDeadline(time.Now().Add(writeWait)); err != nil {
+		return err
+	}
 	return c.Conn.WriteJSON(v)
+}
+
+func (c *Client) writeControl(messageType int, data []byte, deadline time.Time) error {
+	c.writeMu.Lock()
+	defer c.writeMu.Unlock()
+	return c.Conn.WriteControl(messageType, data, deadline)
 }
 
 func (c *Client) setUsername(username string) {
@@ -201,12 +215,43 @@ func validMessageBody(s string) bool {
 	return utf8.RuneCountInString(s) <= maxMessageRunes
 }
 
+func (c *Client) startHeartbeat(done <-chan struct{}) {
+	ticker := time.NewTicker(pingPeriod)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			if err := c.writeControl(websocket.PingMessage, nil, time.Now().Add(writeWait)); err != nil {
+				slog.Warn("ping client", "err", err)
+				_ = c.Conn.Close()
+				return
+			}
+		case <-done:
+			return
+		}
+	}
+}
+
 func (c *Client) readMessages() {
+	done := make(chan struct{})
+	go c.startHeartbeat(done)
+
 	defer func() {
+		close(done)
 		metrics.ConnectedClients.Dec()
 		c.Hub.unregister <- c
 		_ = c.Conn.Close()
 	}()
+
+	c.Conn.SetReadLimit(maxWebSocketReadBytes)
+	if err := c.Conn.SetReadDeadline(time.Now().Add(pongWait)); err != nil {
+		slog.Warn("set read deadline", "err", err)
+		return
+	}
+	c.Conn.SetPongHandler(func(string) error {
+		return c.Conn.SetReadDeadline(time.Now().Add(pongWait))
+	})
 
 	for {
 		var msg Message

@@ -2,6 +2,7 @@ package main
 
 import (
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -247,6 +248,34 @@ func TestWebSocketRejectsInvalidMessages(t *testing.T) {
 	after := messageCount(t, database)
 	if after != before {
 		t.Fatalf("invalid messages should not persist: before=%d after=%d", before, after)
+	}
+}
+
+func TestWebSocketClosesOversizedFrames(t *testing.T) {
+	cfg, database, hub, cleanup := testStack(t)
+	defer cleanup()
+
+	srv := httptest.NewServer(mount(cfg, hub, database))
+	defer srv.Close()
+
+	c := mustDialWS(t, srv)
+	defer func() { _ = c.Close() }()
+
+	oversizedPayload := strings.Repeat("x", maxWebSocketReadBytes+1)
+	if err := c.WriteMessage(websocket.TextMessage, []byte(oversizedPayload)); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := c.SetReadDeadline(time.Now().Add(5 * time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	for {
+		if _, _, err := c.ReadMessage(); err != nil {
+			if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
+				t.Fatal("timed out waiting for oversized frame to close websocket")
+			}
+			return
+		}
 	}
 }
 
