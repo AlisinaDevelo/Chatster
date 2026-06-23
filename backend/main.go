@@ -283,6 +283,7 @@ func (c *Client) readMessages() {
 		if msg.Type == "username" {
 			name := strings.TrimSpace(msg.Content)
 			if !validUsername(name) {
+				metrics.MessagesRejected.WithLabelValues("invalid_username").Inc()
 				slog.Warn("invalid username rejected")
 				continue
 			}
@@ -295,10 +296,12 @@ func (c *Client) readMessages() {
 		}
 		body := strings.TrimSpace(msg.Content)
 		if !validMessageBody(body) {
+			metrics.MessagesRejected.WithLabelValues("invalid_body").Inc()
 			slog.Warn("invalid message rejected")
 			continue
 		}
 		if !c.allowMessage() {
+			metrics.MessagesRejected.WithLabelValues("rate_limited").Inc()
 			slog.Warn("message rate limited")
 			c.sendRateLimitNotice()
 			continue

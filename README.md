@@ -13,7 +13,7 @@ Real-time chat reference stack: **Go** WebSocket hub + **SQLite** history, **Rea
 - WebSocket broadcast with reconnect, **buffered hub channel**, **per-client write serialization** (safe gorilla/websocket usage).
 - Last **50** messages replayed on connect; **SQLite timestamp** parsing supports multiple on-disk formats.
 - **`GET /health`** with SQLite ping (503 when degraded); **`GET /metrics`** for Prometheus.
-- **Abuse controls:** max username/message size (runes), per-IP **WebSocket upgrade** rate limit, optional **`Origin`** allowlist.
+- **Abuse controls:** max username/message size (runes), per-IP **WebSocket upgrade** rate limit, per-client **message** rate limit, optional **`Origin`** allowlist.
 - Structured JSON logs (`slog`), graceful shutdown, GitHub Actions (lint, test + coverage, ESLint, build), Dependabot, Docker Compose.
 
 **Frontend** is intentionally a focused CRA SPA—see [docs/FRONTEND.md](docs/FRONTEND.md) for accessibility, performance notes, and how this repo positions **backend/platform** depth vs UI framework churn.

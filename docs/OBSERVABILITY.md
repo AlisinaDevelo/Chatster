@@ -14,11 +14,18 @@ How Chatster is instrumented today and how you would extend it toward **SLOs** a
 
 Namespaces and names follow `chatster_*` where applicable. Inspect `/metrics` on a running server for the full set (including Go runtime defaults).
 
+| Metric | Type | What it tells you |
+|--------|------|-------------------|
+| `chatster_websocket_clients_connected` | Gauge | Current active WebSocket clients. |
+| `chatster_websocket_upgrades_total{result}` | Counter | Upgrade attempts by outcome: `ok`, `denied_origin`, `rate_limited`, `upgrade_error`. |
+| `chatster_chat_messages_ingested_total` | Counter | Valid chat messages accepted for persistence and broadcast. |
+| `chatster_chat_messages_rejected_total{reason}` | Counter | Rejected chat inputs by reason: `invalid_username`, `invalid_body`, `rate_limited`. |
+
 Suggested **recording rules / dashboards** (Grafana) for a real deployment:
 
 - **Traffic:** rate of WS upgrades, rate of messages persisted.
 - **Saturation:** connected clients, goroutine count (default `go_*` metrics).
-- **Errors:** WS upgrade failures, DB errors (expose via counters when you add labeled error paths).
+- **Errors:** WS upgrade failures, rejected messages, DB errors (expose via counters when you add labeled error paths).
 
 ## SLO sketch (example — not a promise)
 

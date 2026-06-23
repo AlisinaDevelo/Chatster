@@ -24,4 +24,10 @@ var (
 		Name:      "chat_messages_ingested_total",
 		Help:      "Validated chat messages accepted for broadcast.",
 	})
+
+	MessagesRejected = promauto.NewCounterVec(prometheus.CounterOpts{
+		Namespace: "chatster",
+		Name:      "chat_messages_rejected_total",
+		Help:      "Chat messages rejected by reason (invalid_username, invalid_body, rate_limited).",
+	}, []string{"reason"})
 )

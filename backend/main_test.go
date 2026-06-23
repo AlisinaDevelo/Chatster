@@ -338,6 +338,16 @@ func TestWebSocketMessageRateLimit(t *testing.T) {
 	if got := messageContentCount(t, database, "second"); got != 0 {
 		t.Fatalf("rate-limited message should not persist, got %d", got)
 	}
+
+	resp, err := http.Get(srv.URL + "/metrics")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	body, _ := io.ReadAll(resp.Body)
+	if !strings.Contains(string(body), `chatster_chat_messages_rejected_total{reason="rate_limited"}`) {
+		t.Fatalf("metrics missing rate_limited rejection counter")
+	}
 }
 
 func wsURL(srv *httptest.Server) string {
