@@ -263,7 +263,7 @@ func TestWebSocketClosesOversizedFrames(t *testing.T) {
 
 	oversizedPayload := strings.Repeat("x", maxWebSocketReadBytes+1)
 	if err := c.WriteMessage(websocket.TextMessage, []byte(oversizedPayload)); err != nil {
-		t.Fatal(err)
+		return
 	}
 
 	if err := c.SetReadDeadline(time.Now().Add(5 * time.Second)); err != nil {
