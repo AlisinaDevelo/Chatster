@@ -66,7 +66,7 @@ done
 
 ### Why no 100-client row
 
-A single node is past its useful broadcast ceiling well before 100 clients, and the numbers there are **not reproducible** on commodity hardware: across five 100-client runs we saw delivery shortfalls ranging from ~1% to ~50% and noticeable client-side send aborts under load. The shortfall is *not* the bounded queue shedding (`chatster_ws_outbound_drops` stayed at 0) — it is the single-node O(N²) fan-out saturating the event loop and connection handling. Rather than publish a precise-looking but unstable figure, the takeaway is qualitative: **in-process broadcast does not scale past a few dozen concurrent clients**, which is the motivation for the pub/sub design in [SCALING.md](SCALING.md). Run `wsload` at higher client counts yourself to see the variance.
+A single node is past its useful broadcast ceiling well before 100 clients, and the numbers there are **not reproducible** on commodity hardware: across five 100-client runs we saw delivery shortfalls ranging from ~1% to ~50% and noticeable client-side send aborts under load. The shortfall is *not* bounded-queue shedding (`chatster_websocket_outbound_drops_total` stayed at 0) — it is the single-node O(N²) fan-out saturating connection handling. Rather than publish a precise-looking but unstable figure, the takeaway is qualitative: **in-process broadcast does not scale past a few dozen concurrent clients**, which is the motivation for the pub/sub design in [SCALING.md](SCALING.md). Run `wsload` at higher client counts yourself to see the variance.
 
 ## Notes
 
