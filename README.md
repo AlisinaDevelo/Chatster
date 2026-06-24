@@ -15,7 +15,7 @@ Real-time chat reference stack: **Go** WebSocket hub + **SQLite** history, **Rea
 - **`GET /health`** with SQLite ping (503 when degraded); **`GET /metrics`** for Prometheus.
 - **Abuse controls:** max username/message size (runes), per-IP **WebSocket upgrade** rate limit, per-client **message** rate limit, optional **`Origin`** allowlist.
 - Structured JSON logs (`slog`), graceful shutdown, GitHub Actions (lint, test + coverage, ESLint, build), Dependabot, Docker Compose.
-- **Measured:** zero message loss with **p99 ≈ 5.6 ms** broadcast delivery at 25 concurrent clients (Apple M1, Go 1.26); reproducible harness and full O(N²) fan-out scaling table in [docs/LOAD_TESTING.md](docs/LOAD_TESTING.md).
+- **Measured:** zero message loss with **p99 ≈ 6.4 ms** broadcast delivery at 25 concurrent clients (Apple M1, Go 1.26); reproducible harness and full O(N²) fan-out scaling table in [docs/LOAD_TESTING.md](docs/LOAD_TESTING.md).
 
 **Frontend** is intentionally a focused CRA SPA—see [docs/FRONTEND.md](docs/FRONTEND.md) for accessibility, performance notes, and how this repo positions **backend/platform** depth vs UI framework churn.
 
