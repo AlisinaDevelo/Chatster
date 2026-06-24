@@ -65,6 +65,24 @@
 .message-container {
   margin-bottom: 14px;
   animation: msg-in 0.35s ease-out both;
+
+  &.is-own {
+    .message-header {
+      .username {
+        color: var(--accent);
+      }
+    }
+
+    .message-content {
+      border-color: rgba(46, 230, 199, 0.32);
+      background: linear-gradient(
+        145deg,
+        rgba(46, 230, 199, 0.14) 0%,
+        rgba(139, 123, 255, 0.08) 100%
+      );
+      box-shadow: 0 8px 32px rgba(46, 230, 199, 0.08);
+    }
+  }
 }
 
 @keyframes msg-in {
@@ -128,7 +146,9 @@
   animation: msg-in 0.4s ease-out both;
 
   .notification {
-    display: inline-block;
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
     max-width: 100%;
     padding: 8px 16px;
     border-radius: 999px;
@@ -138,6 +158,13 @@
     color: var(--text-muted);
     border: 1px dashed rgba(255, 255, 255, 0.15);
     background: rgba(139, 123, 255, 0.08);
+
+    time {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: rgba(255, 255, 255, 0.38);
+      font-variant-numeric: tabular-nums;
+    }
   }
 }
 

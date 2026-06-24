@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"io"
 	"net"
 	"net/http"
@@ -66,6 +67,67 @@ func TestHealth_DegradedWhenDBClosed(t *testing.T) {
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusServiceUnavailable {
 		t.Fatalf("want 503, got %d", resp.StatusCode)
+	}
+}
+
+func TestMessagesEndpointReturnsBoundedHistory(t *testing.T) {
+	cfg, database, hub, cleanup := testStack(t)
+	defer cleanup()
+
+	for _, content := range []string{"one", "two", "three"} {
+		if _, err := database.SaveMessage("alice", content, "message"); err != nil {
+			t.Fatalf("save message %q: %v", content, err)
+		}
+	}
+
+	srv := httptest.NewServer(mount(cfg, hub, database))
+	defer srv.Close()
+
+	resp, err := http.Get(srv.URL + "/api/messages?limit=2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status %d", resp.StatusCode)
+	}
+
+	var payload struct {
+		Messages []Message `json:"messages"`
+		Limit    int       `json:"limit"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		t.Fatal(err)
+	}
+
+	if payload.Limit != 2 {
+		t.Fatalf("limit: got %d want 2", payload.Limit)
+	}
+	if len(payload.Messages) != 2 {
+		t.Fatalf("messages: got %d want 2", len(payload.Messages))
+	}
+	if payload.Messages[0].Content != "two" || payload.Messages[1].Content != "three" {
+		t.Fatalf("messages should be chronological recent history, got %#v", payload.Messages)
+	}
+	if payload.Messages[0].ID == 0 || payload.Messages[0].Timestamp.IsZero() {
+		t.Fatalf("message should include id and timestamp: %#v", payload.Messages[0])
+	}
+}
+
+func TestMessagesEndpointRejectsInvalidLimit(t *testing.T) {
+	cfg, database, hub, cleanup := testStack(t)
+	defer cleanup()
+
+	srv := httptest.NewServer(mount(cfg, hub, database))
+	defer srv.Close()
+
+	resp, err := http.Get(srv.URL + "/api/messages?limit=0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("want 400, got %d", resp.StatusCode)
 	}
 }
 

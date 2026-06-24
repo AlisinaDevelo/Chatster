@@ -6,7 +6,7 @@ describe('ChatInput', () => {
   test('submits trimmed message when connected', async () => {
     const sendMessage = jest.fn();
     render(
-      <ChatInput sendMessage={sendMessage} hasUsername connectionStatus="connected" />
+      <ChatInput sendMessage={sendMessage} hasUsername username="alice" connectionStatus="connected" />
     );
     await userEvent.type(screen.getByPlaceholderText(/type your message/i), '  hi  ');
     await userEvent.click(screen.getByRole('button', { name: /send/i }));
@@ -15,8 +15,19 @@ describe('ChatInput', () => {
 
   test('disables input when disconnected', () => {
     render(
-      <ChatInput sendMessage={jest.fn()} hasUsername connectionStatus="disconnected" />
+      <ChatInput sendMessage={jest.fn()} hasUsername username="alice" connectionStatus="disconnected" />
     );
     expect(screen.getByPlaceholderText(/type your message/i)).toBeDisabled();
+  });
+
+  test('shows explicit username setup before joining', async () => {
+    const sendMessage = jest.fn();
+    render(
+      <ChatInput sendMessage={sendMessage} hasUsername={false} connectionStatus="connected" />
+    );
+    expect(screen.getByRole('heading', { name: /choose a display name/i })).toBeInTheDocument();
+    await userEvent.type(screen.getByPlaceholderText(/enter your username/i), ' alice ');
+    await userEvent.click(screen.getByRole('button', { name: /join chat/i }));
+    expect(sendMessage).toHaveBeenCalledWith('alice');
   });
 });

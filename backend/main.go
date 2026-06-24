@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -210,9 +211,11 @@ func (h *Hub) sendMessageHistory(client *Client) {
 
 	for _, msg := range messages {
 		message := Message{
-			Username: msg.Username,
-			Content:  msg.Content,
-			Type:     msg.Type,
+			ID:        msg.ID,
+			Username:  msg.Username,
+			Content:   msg.Content,
+			Type:      msg.Type,
+			Timestamp: msg.Timestamp,
 		}
 		if !client.enqueue(message) {
 			slog.Warn("queue history row")
@@ -458,6 +461,41 @@ func healthHandler(database *db.DB) http.HandlerFunc {
 	}
 }
 
+func messagesHandler(database *db.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		limit := 50
+		if raw := r.URL.Query().Get("limit"); raw != "" {
+			parsed, err := strconv.Atoi(raw)
+			if err != nil || parsed < 1 {
+				http.Error(w, "limit must be a positive integer", http.StatusBadRequest)
+				return
+			}
+			limit = parsed
+			if limit > 100 {
+				limit = 100
+			}
+		}
+
+		messages, err := database.GetRecentMessages(limit)
+		if err != nil {
+			slog.Warn("list message history", "err", err)
+			http.Error(w, "message history unavailable", http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"messages": messages,
+			"limit":    limit,
+		})
+	}
+}
+
 func enableCORS(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
@@ -489,6 +527,7 @@ func mount(cfg config.Config, hub *Hub, database *db.DB) http.Handler {
 	})
 
 	r.HandleFunc("/health", healthHandler(database))
+	r.HandleFunc("/api/messages", messagesHandler(database))
 
 	r.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
 		serveWs(hub, cfg, up, wsRL, w, r)

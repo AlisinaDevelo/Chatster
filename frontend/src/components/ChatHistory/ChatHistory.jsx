@@ -7,7 +7,7 @@ const formatTime = (timestamp) => {
   return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 };
 
-const ChatHistory = ({ chatHistory }) => {
+const ChatHistory = ({ chatHistory, currentUsername }) => {
   const messagesEndRef = useRef(null);
   
   const scrollToBottom = () => {
@@ -24,20 +24,25 @@ const ChatHistory = ({ chatHistory }) => {
   const renderMessages = () => {
     return chatHistory.map((msg, index) => {
       const isNotification = msg.type === 'notification';
+      const isOwn = !isNotification && currentUsername && msg.username === currentUsername;
       const key =
         msg.id != null ? `msg-${msg.id}` : `local-${index}-${msg.username}-${msg.content?.slice(0, 16)}`;
 
       return (
-        <div key={key} className={isNotification ? 'message-notification' : 'message-container'}>
+        <div
+          key={key}
+          className={isNotification ? 'message-notification' : `message-container ${isOwn ? 'is-own' : ''}`}
+        >
           {isNotification ? (
             <div className="notification">
-              {msg.content}
+              <span>{msg.content}</span>
+              {msg.timestamp && <time>{formatTime(msg.timestamp)}</time>}
             </div>
           ) : (
             <div className="message">
               <div className="message-header">
-                <span className="username">{msg.username}</span>
-                <span className="timestamp">{formatTime(msg.timestamp)}</span>
+                <span className="username">{isOwn ? 'You' : msg.username}</span>
+                <time className="timestamp">{formatTime(msg.timestamp)}</time>
               </div>
               <div className="message-content">
                 {msg.content}

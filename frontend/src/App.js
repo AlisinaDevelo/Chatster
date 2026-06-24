@@ -1,21 +1,40 @@
 import React, { useState, useEffect } from 'react';
 // import logo from './logo.svg';
 import './App.css';
-import { connect, disconnect, sendMsg } from './api';
+import { connect, disconnect, fetchRecentMessages, sendMsg } from './api';
 import Header from './components/Header/Header';
 import ChatHistory from './components/ChatHistory/ChatHistory';
 import ChatInput from './components/ChatInput/ChatInput';
 
+function appendUniqueMessages(existing, incoming) {
+  const seenIds = new Set(existing.filter((msg) => msg.id != null).map((msg) => msg.id));
+  const nextMessages = [...existing];
+
+  incoming.forEach((msg) => {
+    if (msg.id != null) {
+      if (seenIds.has(msg.id)) {
+        return;
+      }
+      seenIds.add(msg.id);
+    }
+    nextMessages.push(msg);
+  });
+
+  return nextMessages;
+}
+
 function App() {
   const [chatHistory, setChatHistory] = useState([]);
-  const [hasUsername, setHasUsername] = useState(false);
+  const [username, setUsername] = useState('');
   const [connectionStatus, setConnectionStatus] = useState('connecting');
+
+  const hasUsername = username !== '';
 
   useEffect(() => {
     connect((msg) => {
       try {
         const parsedMessage = JSON.parse(msg.data);
-        setChatHistory((prevChatHistory) => [...prevChatHistory, parsedMessage]);
+        setChatHistory((prevChatHistory) => appendUniqueMessages(prevChatHistory, [parsedMessage]));
       } catch (e) {
         console.error('Error parsing message:', e);
       }
@@ -23,26 +42,49 @@ function App() {
     return () => disconnect();
   }, []);
 
-  const send = (message) => {
-    if (!hasUsername) {
-      // If this is the first message, it's setting a username
+  useEffect(() => {
+    if (connectionStatus !== 'connected') {
+      return undefined;
+    }
+
+    let cancelled = false;
+    fetchRecentMessages(50)
+      .then((messages) => {
+        if (!cancelled) {
+          setChatHistory((prevChatHistory) => appendUniqueMessages(prevChatHistory, messages));
+        }
+      })
+      .catch((e) => {
+        console.warn('Error fetching message history:', e);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [connectionStatus]);
+
+  useEffect(() => {
+    if (connectionStatus === 'connected' && hasUsername) {
       sendMsg(JSON.stringify({
         type: 'username',
-        content: message
+        content: username
       }));
-      setHasUsername(true);
-      
-      // Add local message to show username set
+    }
+  }, [connectionStatus, hasUsername, username]);
+
+  const send = (message) => {
+    if (!hasUsername) {
+      setUsername(message);
       setChatHistory(prev => [
-        ...prev, 
+        ...prev,
         {
           type: 'notification',
           username: 'System',
-          content: `You joined as ${message}`
+          content: `You joined as ${message}`,
+          timestamp: new Date().toISOString()
         }
       ]);
     } else {
-      // Regular chat message
       sendMsg(JSON.stringify({
         type: 'message',
         content: message
@@ -62,15 +104,16 @@ function App() {
           {connectionStatus !== 'connected' && (
             <div className="connection-status" role="status" aria-live="polite">
               {connectionStatus === 'connecting' && 'Connecting…'}
-              {connectionStatus === 'disconnected' && 'Reconnecting…'}
+              {connectionStatus === 'disconnected' && 'Reconnecting and catching up…'}
               {connectionStatus === 'error' && 'Connection error — retrying…'}
             </div>
           )}
 
-          <ChatHistory chatHistory={chatHistory} />
+          <ChatHistory chatHistory={chatHistory} currentUsername={username} />
           <ChatInput
             sendMessage={send}
             hasUsername={hasUsername}
+            username={username}
             connectionStatus={connectionStatus}
           />
         </div>

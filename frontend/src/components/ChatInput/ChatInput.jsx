@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import './ChatInput.scss';
 
-const ChatInput = ({ sendMessage, hasUsername, connectionStatus }) => {
+const ChatInput = ({ sendMessage, hasUsername, username, connectionStatus }) => {
   const [message, setMessage] = useState('');
   
   const handleSubmit = (e) => {
@@ -16,9 +16,24 @@ const ChatInput = ({ sendMessage, hasUsername, connectionStatus }) => {
   const canSend = connectionStatus === 'connected';
   const inputId = 'chat-message-input';
   const hintId = 'chat-username-hint';
+  const submitLabel = hasUsername ? 'Send' : 'Join chat';
 
   return (
-    <div className="chat-input">
+    <div className={`chat-input ${hasUsername ? 'is-composer' : 'is-setup'}`}>
+      {!hasUsername ? (
+        <div className="setup-copy">
+          <p className="eyebrow">Identity</p>
+          <h3>Choose a display name</h3>
+          <p id={hintId}>
+            This demo has no accounts. Your name is used only for this WebSocket session.
+          </p>
+        </div>
+      ) : (
+        <div className="composer-status" aria-live="polite">
+          <span>Joined as</span>
+          <strong>{username}</strong>
+        </div>
+      )}
       <form onSubmit={handleSubmit}>
         <label htmlFor={inputId} className="visually-hidden">
           {hasUsername ? 'Chat message' : 'Choose a display name'}
@@ -35,16 +50,11 @@ const ChatInput = ({ sendMessage, hasUsername, connectionStatus }) => {
           aria-describedby={hasUsername ? undefined : hintId}
         />
         <button type="submit" disabled={message.trim() === '' || !canSend}>
-          {hasUsername ? 'Send' : 'Set Username'}
+          {submitLabel}
         </button>
       </form>
-      {!hasUsername && (
-        <p id={hintId} className="hint">
-          Please enter your username to start chatting
-        </p>
-      )}
     </div>
   );
 };
 
-export default ChatInput; 
+export default ChatInput;
