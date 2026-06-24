@@ -37,33 +37,36 @@ The command prints a JSON summary. Key fields:
 
 ## Results
 
-Measured on an **Apple M1 (8 cores), macOS 26.5.1, Go 1.26.3**, 2026-06-24, with both rate limiters disabled and a **fresh SQLite database per run**. Each client sent 20 messages after a 1 s settle period, paced at 5 ms; every message is broadcast to all connected clients, so deliveries scale as O(clients²).
+Measured on an **Apple M1 (8 cores), macOS 26.5.1, Go 1.26.3**, 2026-06-24, with both rate limiters disabled and a **fresh SQLite database per run**. Each client sent 20 messages after a 1 s settle period, paced at 5 ms; every message is broadcast to all connected clients, so deliveries scale as O(clients²). The 25-client row is a single representative run; the 50-client row is the **median of 5 runs**.
 
 | Clients | Delivered | Lost | Throughput (deliveries/s) | p50 | p95 | p99 |
 |--------:|----------:|-----:|--------------------------:|----:|----:|----:|
-| 25  | 12,500 / 12,500 | 0 | ~119,000 | 2.6 ms | 5.0 ms | 6.4 ms |
-| 50  | 50,000 / 50,000 | 0 | ~122,000 | 125 ms | 296 ms | 307 ms |
-| 100 | 200,000 / 200,000 | 0 | ~166,000 | 590 ms | 1,052 ms | 1,094 ms |
+| 25 | 12,500 / 12,500 | 0 | ~121,000 | 2.2 ms | 4.3 ms | 5.7 ms |
+| 50 | 50,000 / 50,000 | 0 | ~314,000 | 22 ms | 48 ms | 57 ms |
 
 Reproduce with:
 
 ```bash
-for c in 25 50 100; do
+for c in 25 50; do
   go run ./cmd/wsload \
     -clients $c \
     -messages 20 \
     -settle-for 1s \
     -send-interval 5ms \
-    -drain-for 8s \
+    -drain-for 6s \
     -fail-on-loss
 done
 ```
 
 ### Reading the numbers
 
-- **Zero message loss** at every level — the hub's per-client write serialization holds under concurrent fan-out.
-- Latency stays in **single-digit milliseconds at 25 clients** and grows with client count because broadcast is **O(clients²)**: 100 clients × 100 recipients per message is 10,000× the per-message work of a single send. This is the expected cost of in-process broadcast and is exactly why [SCALING.md](SCALING.md) routes multi-instance fan-out through a pub/sub layer rather than scaling the single-node hub.
+- **Zero message loss** at 25 and 50 clients across every run — the hub's per-client write serialization and bounded outbound queues hold under concurrent fan-out.
+- Latency stays in **single-digit milliseconds at 25 clients** and grows with client count because broadcast is **O(clients²)**: each message is delivered to every connected client, so per-message work scales with the square of the client count. This is the expected cost of in-process broadcast and is exactly why [SCALING.md](SCALING.md) routes multi-instance fan-out through a pub/sub layer rather than scaling the single-node hub.
 - Throughput is reported as **delivered** frames, not attempted sends, so it reflects real server fan-out work. The harness deduplicates each `(sender, sequence)` per recipient so history replay cannot inflate delivery counts.
+
+### Why no 100-client row
+
+A single node is past its useful broadcast ceiling well before 100 clients, and the numbers there are **not reproducible** on commodity hardware: across five 100-client runs we saw delivery shortfalls ranging from ~1% to ~50% and noticeable client-side send aborts under load. The shortfall is *not* the bounded queue shedding (`chatster_ws_outbound_drops` stayed at 0) — it is the single-node O(N²) fan-out saturating the event loop and connection handling. Rather than publish a precise-looking but unstable figure, the takeaway is qualitative: **in-process broadcast does not scale past a few dozen concurrent clients**, which is the motivation for the pub/sub design in [SCALING.md](SCALING.md). Run `wsload` at higher client counts yourself to see the variance.
 
 ## Notes
 
