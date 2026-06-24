@@ -32,7 +32,7 @@ jobs:
       - run: go mod download
       - run: go test -race -coverprofile=coverage.out ./...
       - run: go vet ./...
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: go-coverage
           path: backend/coverage.out
