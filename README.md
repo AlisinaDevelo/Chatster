@@ -10,7 +10,7 @@ Real-time chat reference stack: **Go** WebSocket hub + **SQLite** history, **Rea
 
 ## Highlights
 
-- WebSocket broadcast with reconnect, **buffered hub channel**, **per-client write serialization** (safe gorilla/websocket usage).
+- WebSocket broadcast with reconnect, **buffered hub channel**, **bounded per-client outbound queues**, and safe gorilla/websocket write serialization.
 - Last **50** messages replayed on connect; **SQLite timestamp** parsing supports multiple on-disk formats.
 - **`GET /health`** with SQLite ping (503 when degraded); **`GET /metrics`** for Prometheus.
 - **Abuse controls:** max username/message size (runes), per-IP **WebSocket upgrade** rate limit, per-client **message** rate limit, optional **`Origin`** allowlist.

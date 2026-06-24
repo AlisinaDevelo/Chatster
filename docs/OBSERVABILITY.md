@@ -18,6 +18,7 @@ Namespaces and names follow `chatster_*` where applicable. Inspect `/metrics` on
 |--------|------|-------------------|
 | `chatster_websocket_clients_connected` | Gauge | Current active WebSocket clients. |
 | `chatster_websocket_upgrades_total{result}` | Counter | Upgrade attempts by outcome: `ok`, `denied_origin`, `rate_limited`, `upgrade_error`. |
+| `chatster_websocket_outbound_drops_total{reason}` | Counter | Outbound drops by reason: `slow_client`, `write_error`. |
 | `chatster_chat_messages_ingested_total` | Counter | Valid chat messages accepted for persistence and broadcast. |
 | `chatster_chat_messages_rejected_total{reason}` | Counter | Rejected chat inputs by reason: `invalid_username`, `invalid_body`, `rate_limited`. |
 
@@ -25,7 +26,7 @@ Suggested **recording rules / dashboards** (Grafana) for a real deployment:
 
 - **Traffic:** rate of WS upgrades, rate of messages persisted.
 - **Saturation:** connected clients, goroutine count (default `go_*` metrics).
-- **Errors:** WS upgrade failures, rejected messages, DB errors (expose via counters when you add labeled error paths).
+- **Errors:** WS upgrade failures, outbound drops, rejected messages, DB errors (expose via counters when you add labeled error paths).
 
 ## SLO sketch (example — not a promise)
 

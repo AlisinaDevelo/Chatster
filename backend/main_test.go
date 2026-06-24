@@ -350,6 +350,69 @@ func TestWebSocketMessageRateLimit(t *testing.T) {
 	}
 }
 
+func TestClientEnqueueIsBounded(t *testing.T) {
+	client := &Client{
+		send: make(chan Message, 1),
+		done: make(chan struct{}),
+	}
+
+	if !client.enqueue(Message{Type: "message", Content: "first"}) {
+		t.Fatal("first enqueue should fit")
+	}
+	if client.enqueue(Message{Type: "message", Content: "second"}) {
+		t.Fatal("second enqueue should fail when queue is full")
+	}
+
+	client.close()
+	if client.enqueue(Message{Type: "message", Content: "after close"}) {
+		t.Fatal("enqueue should fail after close")
+	}
+}
+
+func TestHubDisconnectClientRemovesAndNotifies(t *testing.T) {
+	database, err := db.Open(filepath.Join(t.TempDir(), "disconnect.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = database.Close() }()
+	hub := newHub(database)
+
+	client := &Client{
+		Username: "bob",
+		send:     make(chan Message, 1),
+		done:     make(chan struct{}),
+	}
+
+	hub.mutex.Lock()
+	hub.clients[client] = true
+	hub.disconnectClientLocked(client)
+	_, stillRegistered := hub.clients[client]
+	hub.mutex.Unlock()
+
+	if stillRegistered {
+		t.Fatal("client should be removed from hub")
+	}
+
+	select {
+	case <-client.done:
+	default:
+		t.Fatal("client should be closed")
+	}
+
+	select {
+	case msg := <-hub.broadcast:
+		if msg.Type != "notification" || !strings.Contains(msg.Content, "left the chat") {
+			t.Fatalf("unexpected leave notification: %#v", msg)
+		}
+	default:
+		t.Fatal("expected leave notification")
+	}
+
+	if got := messageContentCount(t, database, "bob left the chat"); got != 1 {
+		t.Fatalf("leave notification should be persisted once, got %d", got)
+	}
+}
+
 func wsURL(srv *httptest.Server) string {
 	return "ws" + strings.TrimPrefix(srv.URL, "http") + "/ws"
 }

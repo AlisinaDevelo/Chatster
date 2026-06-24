@@ -19,6 +19,12 @@ var (
 		Help:      "WebSocket upgrade attempts by result (ok, denied_origin, rate_limited, upgrade_error).",
 	}, []string{"result"})
 
+	WSOutboundDrops = promauto.NewCounterVec(prometheus.CounterOpts{
+		Namespace: "chatster",
+		Name:      "websocket_outbound_drops_total",
+		Help:      "Outbound WebSocket messages dropped by reason (slow_client, write_error).",
+	}, []string{"reason"})
+
 	MessagesIngested = promauto.NewCounter(prometheus.CounterOpts{
 		Namespace: "chatster",
 		Name:      "chat_messages_ingested_total",

@@ -21,6 +21,8 @@ flowchart LR
   Mux --> Hub
   Mux --> Prom
   Hub --> DB
+  Hub --> Queues[Per-client outbound queues]
+  Queues --> WSClient
 ```
 
 ### Backend (`backend/`)
@@ -42,7 +44,9 @@ flowchart LR
 **Concurrency**
 
 - **`broadcast`** uses a **buffered** channel so a client’s read loop does not deadlock when the hub writes back to the same socket (see [adr/0005](adr/0005-broadcast-channel-and-writer-lock.md)).
-- All server writes to a given `*websocket.Conn` go through **`Client.writeJSON`** (mutex) because **gorilla/websocket** permits only one concurrent writer per connection (history replay + hub broadcast can otherwise race).
+- The hub does **not** write directly to sockets during fan-out. It enqueues messages into each client's bounded outbound queue (see [adr/0006](adr/0006-bounded-client-outbound-queues.md)).
+- Each client has one writer goroutine. All server writes to a given `*websocket.Conn` still go through **`Client.writeJSON`** (mutex) because **gorilla/websocket** permits only one concurrent writer per connection (queued messages + heartbeat control frames can otherwise race).
+- A full outbound queue is treated as a slow-client failure: the server disconnects that client and increments `chatster_websocket_outbound_drops_total{reason="slow_client"}`.
 
 **Operational endpoints**
 

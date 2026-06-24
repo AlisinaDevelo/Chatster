@@ -30,6 +30,7 @@ const (
 	maxMessageRunes  = 4000
 
 	maxWebSocketReadBytes = 32 * 1024
+	outboundQueueSize     = 256
 	writeWait             = 10 * time.Second
 	pongWait              = 60 * time.Second
 	pingPeriod            = (pongWait * 9) / 10
@@ -53,6 +54,9 @@ type Client struct {
 	writeMu    sync.Mutex // gorilla/websocket allows one writer at a time
 	usernameMu sync.RWMutex
 	msgLimiter *rate.Limiter
+	send       chan Message
+	done       chan struct{}
+	closeOnce  sync.Once
 }
 
 func (c *Client) writeJSON(v any) error {
@@ -82,6 +86,32 @@ func (c *Client) username() string {
 	return c.Username
 }
 
+func (c *Client) enqueue(message Message) bool {
+	select {
+	case <-c.done:
+		return false
+	default:
+	}
+
+	select {
+	case c.send <- message:
+		return true
+	case <-c.done:
+		return false
+	default:
+		return false
+	}
+}
+
+func (c *Client) close() {
+	c.closeOnce.Do(func() {
+		close(c.done)
+		if c.Conn != nil {
+			_ = c.Conn.Close()
+		}
+	})
+}
+
 // Hub manages all connected clients
 type Hub struct {
 	clients    map[*Client]bool
@@ -101,6 +131,31 @@ func newHub(database *db.DB) *Hub {
 		unregister: make(chan *Client),
 		database:   database,
 	}
+}
+
+func (h *Hub) disconnectClientLocked(client *Client) {
+	if _, ok := h.clients[client]; !ok {
+		return
+	}
+	delete(h.clients, client)
+	client.close()
+
+	username := client.username()
+	if username == "Anonymous" {
+		return
+	}
+
+	notification := Message{
+		Username: "System",
+		Content:  fmt.Sprintf("%s left the chat", username),
+		Type:     "notification",
+	}
+
+	if _, err := h.database.SaveMessage(notification.Username, notification.Content, notification.Type); err != nil {
+		slog.Warn("save leave notification", "err", err)
+	}
+
+	h.broadcast <- notification
 }
 
 func (h *Hub) run() {
@@ -129,35 +184,16 @@ func (h *Hub) run() {
 
 		case client := <-h.unregister:
 			h.mutex.Lock()
-			if _, ok := h.clients[client]; ok {
-				delete(h.clients, client)
-
-				username := client.username()
-				if username != "Anonymous" {
-					notification := Message{
-						Username: "System",
-						Content:  fmt.Sprintf("%s left the chat", username),
-						Type:     "notification",
-					}
-
-					_, err := h.database.SaveMessage(notification.Username, notification.Content, notification.Type)
-					if err != nil {
-						slog.Warn("save leave notification", "err", err)
-					}
-
-					h.broadcast <- notification
-				}
-			}
+			h.disconnectClientLocked(client)
 			h.mutex.Unlock()
 
 		case message := <-h.broadcast:
 			h.mutex.Lock()
 			for client := range h.clients {
-				err := client.writeJSON(message)
-				if err != nil {
-					slog.Warn("broadcast", "err", err)
-					_ = client.Conn.Close()
-					delete(h.clients, client)
+				if !client.enqueue(message) {
+					metrics.WSOutboundDrops.WithLabelValues("slow_client").Inc()
+					slog.Warn("disconnect slow websocket client")
+					h.disconnectClientLocked(client)
 				}
 			}
 			h.mutex.Unlock()
@@ -178,8 +214,8 @@ func (h *Hub) sendMessageHistory(client *Client) {
 			Content:  msg.Content,
 			Type:     msg.Type,
 		}
-		if err := client.writeJSON(message); err != nil {
-			slog.Warn("send history row", "err", err)
+		if !client.enqueue(message) {
+			slog.Warn("queue history row")
 			return
 		}
 	}
@@ -189,8 +225,8 @@ func (h *Hub) sendMessageHistory(client *Client) {
 		Content:  "Welcome to the chat! You can see the last 50 messages.",
 		Type:     "notification",
 	}
-	if err := client.writeJSON(welcome); err != nil {
-		slog.Warn("welcome message", "err", err)
+	if !client.enqueue(welcome) {
+		slog.Warn("queue welcome message")
 	}
 }
 
@@ -227,8 +263,24 @@ func (c *Client) sendRateLimitNotice() {
 		Content:  "You are sending messages too quickly. Please slow down.",
 		Type:     "notification",
 	}
-	if err := c.writeJSON(notice); err != nil {
-		slog.Warn("send rate limit notice", "err", err)
+	if !c.enqueue(notice) {
+		slog.Warn("queue rate limit notice")
+	}
+}
+
+func (c *Client) writeMessages() {
+	for {
+		select {
+		case message := <-c.send:
+			if err := c.writeJSON(message); err != nil {
+				metrics.WSOutboundDrops.WithLabelValues("write_error").Inc()
+				slog.Warn("write websocket message", "err", err)
+				c.close()
+				return
+			}
+		case <-c.done:
+			return
+		}
 	}
 }
 
@@ -241,7 +293,7 @@ func (c *Client) startHeartbeat(done <-chan struct{}) {
 		case <-ticker.C:
 			if err := c.writeControl(websocket.PingMessage, nil, time.Now().Add(writeWait)); err != nil {
 				slog.Warn("ping client", "err", err)
-				_ = c.Conn.Close()
+				c.close()
 				return
 			}
 		case <-done:
@@ -258,7 +310,7 @@ func (c *Client) readMessages() {
 		close(done)
 		metrics.ConnectedClients.Dec()
 		c.Hub.unregister <- c
-		_ = c.Conn.Close()
+		c.close()
 	}()
 
 	c.Conn.SetReadLimit(maxWebSocketReadBytes)
@@ -358,8 +410,11 @@ func serveWs(hub *Hub, cfg config.Config, up websocket.Upgrader, wsRL *ratelimit
 		Username:   "Anonymous",
 		Hub:        hub,
 		msgLimiter: newMessageLimiter(cfg),
+		send:       make(chan Message, outboundQueueSize),
+		done:       make(chan struct{}),
 	}
 
+	go client.writeMessages()
 	hub.register <- client
 
 	go client.readMessages()

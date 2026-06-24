@@ -9,6 +9,7 @@ Short records of **why** Chatster is shaped the way it is. New significant decis
 | [0003](0003-no-auth-demo-scope.md) | No authentication in the reference scope |
 | [0004](0004-prometheus-metrics.md) | Prometheus metrics on `/metrics` |
 | [0005](0005-broadcast-channel-and-writer-lock.md) | Buffered broadcast + per-client WS write lock |
+| [0006](0006-bounded-client-outbound-queues.md) | Bounded per-client outbound queues |
 
 ## Template
 

@@ -19,4 +19,4 @@ Separately, an **unbuffered** `broadcast` channel caused a **deadlock**: the cli
 
 **Positive:** No writer races; no self-deadlock on single-client broadcast paths.
 
-**Negative:** Mutex adds latency under extreme fan-out; a future design might use one outbound goroutine per client with a channel of outbound frames.
+**Negative:** Mutex adds latency under extreme fan-out; superseded in part by [ADR 0006](0006-bounded-client-outbound-queues.md), which adds one outbound goroutine per client with a bounded channel of outbound frames.
