@@ -15,15 +15,24 @@ In another terminal:
 
 ```bash
 cd backend
-go run ./cmd/wsload -url ws://127.0.0.1:8080/ws -clients 25 -messages 20 -send-interval 5ms -drain-for 3s
+go run ./cmd/wsload \
+  -url ws://127.0.0.1:8080/ws \
+  -clients 25 \
+  -messages 20 \
+  -settle-for 500ms \
+  -send-interval 5ms \
+  -drain-for 3s \
+  -fail-on-loss
 ```
 
 The command prints a JSON summary. Key fields:
 
 - `delivered` — broadcast frames that carried a load message and were received by a connected client (each message fans out to every connected client).
+- `expected_delivered` / `lost` — expected fan-out deliveries (`total_sent × clients`) and the gap between expected and measured deliveries.
 - `delivered_throughput_per_second` — `delivered` over the window from the first send to the last in-scope delivery.
 - `latency_p50_ms` / `p95` / `p99` / `max` / `mean` — round-trip latency from send to delivery, across every delivery.
 - `total_sent` / `total_received` — attempted sends and all inbound frames (including history replay, join/leave, and server notices).
+- `settle_for` — startup grace period after username setup; this keeps connection/bootstrap messages out of the timed send window.
 - `send_interval` — per-client pacing between messages; use a non-zero value for a sustained run instead of a single microburst.
 
 ## Results
@@ -40,7 +49,13 @@ Reproduce with:
 
 ```bash
 for c in 25 50 100; do
-  go run ./cmd/wsload -clients $c -messages 20 -send-interval 5ms -drain-for 3s
+  go run ./cmd/wsload \
+    -clients $c \
+    -messages 20 \
+    -settle-for 500ms \
+    -send-interval 5ms \
+    -drain-for 3s \
+    -fail-on-loss
 done
 ```
 

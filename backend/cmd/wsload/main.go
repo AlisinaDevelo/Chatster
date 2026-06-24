@@ -27,10 +27,13 @@ type result struct {
 	URL               string `json:"url"`
 	Clients           int    `json:"clients"`
 	MessagesPerClient int    `json:"messages_per_client"`
+	SettleFor         string `json:"settle_for"`
 	SendInterval      string `json:"send_interval"`
 	TotalSent         int64  `json:"total_sent"`
+	ExpectedDelivered int64  `json:"expected_delivered"`
 	TotalReceived     int64  `json:"total_received"`
 	Delivered         int64  `json:"delivered"`
+	Lost              int64  `json:"lost"`
 	Errors            int64  `json:"errors"`
 	SendDurationMS    int64  `json:"send_duration_ms"`
 	// DeliveredThroughput is matched broadcast deliveries per second over the
@@ -52,8 +55,10 @@ func main() {
 	messages := flag.Int("messages", 10, "messages sent by each client")
 	prefix := flag.String("username-prefix", "load", "username prefix")
 	connectTimeout := flag.Duration("connect-timeout", 5*time.Second, "WebSocket dial timeout")
+	settleFor := flag.Duration("settle-for", 500*time.Millisecond, "time to wait after connecting clients before sending load messages")
 	sendInterval := flag.Duration("send-interval", 0, "pause between each client's messages (0 = as fast as possible)")
 	drainFor := flag.Duration("drain-for", 2*time.Second, "time to keep reading after sends complete")
+	failOnLoss := flag.Bool("fail-on-loss", false, "exit non-zero when any expected broadcast delivery is missing")
 	flag.Parse()
 
 	if *clients < 1 {
@@ -87,6 +92,7 @@ func main() {
 		go func(slot int, c *websocket.Conn) {
 			defer readers.Done()
 			var samples []int64
+			seen := make(map[string]struct{})
 			for {
 				_, data, err := c.ReadMessage()
 				if err != nil {
@@ -101,11 +107,27 @@ func main() {
 				}
 				var sentNanos, cid, seq int64
 				if n, _ := fmt.Sscanf(msg.Content, "wsload %d %d %d", &sentNanos, &cid, &seq); n == 3 {
+					key := fmt.Sprintf("%d/%d", cid, seq)
+					if _, ok := seen[key]; ok {
+						continue
+					}
+					seen[key] = struct{}{}
 					samples = append(samples, now-sentNanos)
 					lastRecvNanos.Store(now)
 				}
 			}
 		}(idx, conn)
+	}
+
+	for i, conn := range conns {
+		username := fmt.Sprintf("%s-%03d", *prefix, i)
+		if err := conn.WriteJSON(outboundMessage{Type: "username", Content: username}); err != nil {
+			closeAll(conns)
+			log.Fatalf("set username for client %d: %v", i, err)
+		}
+	}
+	if *settleFor > 0 {
+		time.Sleep(*settleFor)
 	}
 
 	start := time.Now()
@@ -115,12 +137,6 @@ func main() {
 		senders.Add(1)
 		go func(clientID int, c *websocket.Conn) {
 			defer senders.Done()
-
-			username := fmt.Sprintf("%s-%03d", *prefix, clientID)
-			if err := c.WriteJSON(outboundMessage{Type: "username", Content: username}); err != nil {
-				errors.Add(1)
-				return
-			}
 
 			for j := 0; j < *messages; j++ {
 				content := fmt.Sprintf("wsload %d %d %d", time.Now().UnixNano(), clientID, j)
@@ -151,12 +167,18 @@ func main() {
 		URL:               *url,
 		Clients:           *clients,
 		MessagesPerClient: *messages,
+		SettleFor:         settleFor.String(),
 		SendInterval:      sendInterval.String(),
 		TotalSent:         sent.Load(),
+		ExpectedDelivered: sent.Load() * int64(*clients),
 		TotalReceived:     received.Load(),
 		Delivered:         int64(len(latencies)),
 		Errors:            errors.Load(),
 		SendDurationMS:    sendDuration.Milliseconds(),
+	}
+	r.Lost = r.ExpectedDelivered - r.Delivered
+	if r.Lost < 0 {
+		r.Lost = 0
 	}
 
 	if last := lastRecvNanos.Load(); last > 0 && len(latencies) > 0 {
@@ -187,6 +209,9 @@ func main() {
 
 	if r.Errors > 0 {
 		log.Fatalf("load run completed with %d send errors", r.Errors)
+	}
+	if *failOnLoss && r.Lost > 0 {
+		log.Fatalf("load run completed with %d missing deliveries", r.Lost)
 	}
 }
 
