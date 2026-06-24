@@ -63,6 +63,59 @@ func TestOpenConfiguresSQLiteForSingleNodeRuntime(t *testing.T) {
 	}
 }
 
+func TestOpenAppliesSchemaMigrations(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "migrations.db")
+	database, err := Open(path)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	t.Cleanup(func() { _ = database.Close() })
+
+	var name string
+	if err := database.QueryRow("SELECT name FROM schema_migrations WHERE version = 1").Scan(&name); err != nil {
+		t.Fatalf("schema migration row: %v", err)
+	}
+	if name != "create_messages" {
+		t.Fatalf("migration name: got %q want %q", name, "create_messages")
+	}
+}
+
+func TestOpenMigrationsAreIdempotent(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "idempotent.db")
+	database, err := Open(path)
+	if err != nil {
+		t.Fatalf("Open first: %v", err)
+	}
+	if _, err := database.SaveMessage("alice", "still here", "message"); err != nil {
+		t.Fatalf("SaveMessage: %v", err)
+	}
+	if err := database.Close(); err != nil {
+		t.Fatalf("close first: %v", err)
+	}
+
+	database, err = Open(path)
+	if err != nil {
+		t.Fatalf("Open second: %v", err)
+	}
+	t.Cleanup(func() { _ = database.Close() })
+
+	var migrationRows int
+	if err := database.QueryRow("SELECT COUNT(*) FROM schema_migrations WHERE version = 1").Scan(&migrationRows); err != nil {
+		t.Fatalf("count migrations: %v", err)
+	}
+	if migrationRows != 1 {
+		t.Fatalf("migration should be recorded once, got %d", migrationRows)
+	}
+
+	var messageRows int
+	if err := database.QueryRow("SELECT COUNT(*) FROM messages WHERE content = ?", "still here").Scan(&messageRows); err != nil {
+		t.Fatalf("count messages: %v", err)
+	}
+	if messageRows != 1 {
+		t.Fatalf("existing messages should survive reopen, got %d", messageRows)
+	}
+}
+
 func TestSaveMessageSkipsUsernameTypePersistence(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "test.db")
 	database, err := Open(path)

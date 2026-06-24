@@ -54,6 +54,10 @@ docker compose up --build
 
 SQLite data persists in the **`chatster-data`** Docker volume.
 
+## Persistence
+
+Startup applies ordered SQLite migrations and records them in `schema_migrations`. Check that ledger before serving real traffic after a schema change.
+
 ## Backups
 
 Copy the SQLite file while the process is stopped, or use SQLite’s backup API / `.backup` for online copies if you extend the service.

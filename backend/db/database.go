@@ -11,6 +11,27 @@ import (
 
 const sqliteBusyTimeoutMS = 5000
 
+type migration struct {
+	version int
+	name    string
+	sql     string
+}
+
+var migrations = []migration{
+	{
+		version: 1,
+		name:    "create_messages",
+		sql: `
+CREATE TABLE IF NOT EXISTS messages (
+	id INTEGER PRIMARY KEY AUTOINCREMENT,
+	username TEXT NOT NULL,
+	content TEXT NOT NULL,
+	type TEXT NOT NULL,
+	timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+);`,
+	},
+}
+
 // Message represents a chat message
 type Message struct {
 	ID        int64     `json:"id"`
@@ -50,7 +71,7 @@ func Open(path string) (*DB, error) {
 		return nil, err
 	}
 
-	if err := initDB(database); err != nil {
+	if err := runMigrations(database); err != nil {
 		_ = database.Close()
 		return nil, err
 	}
@@ -73,24 +94,55 @@ func configureSQLite(db *sql.DB) error {
 	return nil
 }
 
-// initDB creates the tables if they don't exist
-func initDB(db *sql.DB) error {
-	createTableSQL := `
-	CREATE TABLE IF NOT EXISTS messages (
-		id INTEGER PRIMARY KEY AUTOINCREMENT,
-		username TEXT NOT NULL,
-		content TEXT NOT NULL,
-		type TEXT NOT NULL,
-		timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
-	);`
-
-	_, err := db.Exec(createTableSQL)
-	if err != nil {
+func runMigrations(db *sql.DB) error {
+	if _, err := db.Exec(`
+CREATE TABLE IF NOT EXISTS schema_migrations (
+	version INTEGER PRIMARY KEY,
+	name TEXT NOT NULL,
+	applied_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);`); err != nil {
 		return err
 	}
 
-	log.Println("Database initialized successfully")
+	for _, m := range migrations {
+		applied, err := migrationApplied(db, m.version)
+		if err != nil {
+			return err
+		}
+		if applied {
+			continue
+		}
+		if err := applyMigration(db, m); err != nil {
+			return err
+		}
+	}
+
+	log.Println("Database migrations applied successfully")
 	return nil
+}
+
+func migrationApplied(db *sql.DB, version int) (bool, error) {
+	var n int
+	if err := db.QueryRow("SELECT COUNT(*) FROM schema_migrations WHERE version = ?", version).Scan(&n); err != nil {
+		return false, err
+	}
+	return n > 0, nil
+}
+
+func applyMigration(db *sql.DB, m migration) error {
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if _, err := tx.Exec(m.sql); err != nil {
+		return err
+	}
+	if _, err := tx.Exec("INSERT INTO schema_migrations(version, name) VALUES(?, ?)", m.version, m.name); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 // SaveMessage saves a message to the database

@@ -31,7 +31,7 @@ flowchart LR
 - **`internal/config`**: `CHATSTER_*` environment variables (listen address, DB path, **Origin allowlist**, **WS upgrade and message rate limits**).
 - **`internal/metrics`**: Prometheus metric definitions (`chatster_*`).
 - **`internal/ratelimit`**: Per-IP token bucket for WebSocket **upgrade** attempts.
-- **`db/`**: SQLite — `messages` table, `SaveMessage`, `GetRecentMessages` with **flexible timestamp parsing** (RFC3339 and legacy layouts).
+- **`db/`**: SQLite — ordered schema migrations (`schema_migrations` ledger), `messages` table, `SaveMessage`, `GetRecentMessages` with **flexible timestamp parsing** (RFC3339 and legacy layouts).
 
 **Message flow**
 
