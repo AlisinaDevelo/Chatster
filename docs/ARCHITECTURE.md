@@ -41,12 +41,50 @@ flowchart LR
 4. Chat messages are saved (when possible), then broadcast with `id` and `timestamp` when available.
 5. Join/leave notifications are persisted like other rows (except the username handshake).
 
+```mermaid
+sequenceDiagram
+  actor User
+  participant WS as WebSocket client
+  participant Hub as Hub goroutine
+  participant DB as SQLite
+  participant Peers as Other clients
+
+  User->>WS: open GET /ws
+  WS->>Hub: upgrade (rate limit + Origin check)
+  WS->>Hub: {type: "username", content}
+  Hub->>Hub: validate (max runes), set display name
+  Hub->>WS: replay recent history
+  User->>WS: {type: "message", content}
+  Hub->>Hub: validate + coerce non-message types
+  Hub->>DB: SaveMessage (best effort)
+  Hub-->>Peers: enqueue broadcast (id + timestamp)
+  Hub-->>WS: echo own message
+```
+
 **Concurrency**
 
 - **`broadcast`** uses a **buffered** channel so a client’s read loop does not deadlock when the hub writes back to the same socket (see [adr/0005](adr/0005-broadcast-channel-and-writer-lock.md)).
 - The hub does **not** write directly to sockets during fan-out. It enqueues messages into each client's bounded outbound queue (see [adr/0006](adr/0006-bounded-client-outbound-queues.md)).
 - Each client has one writer goroutine. All server writes to a given `*websocket.Conn` still go through **`Client.writeJSON`** (mutex) because **gorilla/websocket** permits only one concurrent writer per connection (queued messages + heartbeat control frames can otherwise race).
 - A full outbound queue is treated as a slow-client failure: the server disconnects that client and increments `chatster_websocket_outbound_drops_total{reason="slow_client"}`.
+
+**Client connection lifecycle**
+
+```mermaid
+stateDiagram-v2
+  [*] --> Connecting
+  Connecting --> Upgraded: upgrade OK
+  Connecting --> Rejected: rate limit / Origin denied
+  Upgraded --> Joined: username accepted
+  Joined --> Joined: send / receive
+  Joined --> Throttled: message rate exceeded
+  Throttled --> Joined: tokens refill
+  Joined --> Dropped: outbound queue full (slow client)
+  Joined --> Disconnected: client closes / read error
+  Rejected --> [*]
+  Dropped --> [*]
+  Disconnected --> [*]
+```
 
 **Operational endpoints**
 
@@ -59,6 +97,27 @@ flowchart LR
 - **`src/api/index.js`**: WebSocket lifecycle, reconnect, `disconnect` on unmount.
 - **`App.js`**: Connection state, username handshake, message list.
 - **Styling**: SCSS + tokens; **accessibility** notes in [FRONTEND.md](FRONTEND.md).
+
+### Data model
+
+SQLite is migrated forward by an ordered `schema_migrations` ledger; chat rows live in
+`messages`. The handshake username message is the only payload not stored as a row.
+
+```mermaid
+erDiagram
+  SCHEMA_MIGRATIONS ||--o{ MESSAGES : "guards schema of"
+  MESSAGES {
+    integer id PK
+    text    username
+    text    content
+    text    type "message / join / leave"
+    text    timestamp "RFC3339 or legacy"
+  }
+  SCHEMA_MIGRATIONS {
+    integer version PK
+    text    applied_at
+  }
+```
 
 ## Configuration
 
