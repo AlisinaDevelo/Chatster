@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -519,6 +520,9 @@ func messagesHandler(database *db.DB) http.HandlerFunc {
 			http.Error(w, "message history unavailable", http.StatusInternalServerError)
 			return
 		}
+		if messages == nil {
+			messages = []db.Message{}
+		}
 
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
@@ -543,6 +547,27 @@ func enableCORS(next http.Handler) http.Handler {
 	})
 }
 
+func staticHandler(staticDir string) http.Handler {
+	fileServer := http.FileServer(http.Dir(staticDir))
+
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		cleanPath := filepath.Clean(r.URL.Path)
+		if cleanPath == "." || cleanPath == string(filepath.Separator) {
+			http.ServeFile(w, r, filepath.Join(staticDir, "index.html"))
+			return
+		}
+
+		path := filepath.Join(staticDir, cleanPath)
+		info, err := os.Stat(path)
+		if err == nil && !info.IsDir() {
+			fileServer.ServeHTTP(w, r)
+			return
+		}
+
+		http.ServeFile(w, r, filepath.Join(staticDir, "index.html"))
+	})
+}
+
 func mount(cfg config.Config, hub *Hub, database *db.DB) http.Handler {
 	r := mux.NewRouter()
 	up := newUpgrader()
@@ -554,16 +579,20 @@ func mount(cfg config.Config, hub *Hub, database *db.DB) http.Handler {
 
 	r.Handle("/metrics", promhttp.Handler())
 
-	r.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		_, _ = fmt.Fprintf(w, "Chatster API Server")
-	})
-
 	r.HandleFunc("/health", healthHandler(database))
 	r.HandleFunc("/api/messages", messagesHandler(database))
 
 	r.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
 		serveWs(hub, cfg, up, wsRL, w, r)
 	})
+
+	if cfg.StaticDir != "" {
+		r.PathPrefix("/").Handler(staticHandler(cfg.StaticDir))
+	} else {
+		r.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+			_, _ = fmt.Fprintf(w, "Chatster API Server")
+		})
+	}
 
 	r.Use(enableCORS)
 	return r

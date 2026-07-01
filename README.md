@@ -1,6 +1,6 @@
 # Chatster
 
-Real-time chat reference stack: **Go** WebSocket hub + **SQLite** history, **React** client, **Docker**-ready, **CI** with lint and coverage, **Prometheus** metrics, and **portfolio-grade** docs (scaling, threat model, ADRs).
+Real-time chat reference stack: **Go** WebSocket hub + **SQLite** history, **React** client, single-service **Docker** production image, **CI** with lint and coverage, **Prometheus** metrics, and **portfolio-grade** docs (scaling, threat model, ADRs).
 
 [![CI](https://github.com/AliSinaDevelo/Chatster/actions/workflows/ci.yml/badge.svg)](https://github.com/AliSinaDevelo/Chatster/actions/workflows/ci.yml)
 
@@ -14,7 +14,7 @@ Real-time chat reference stack: **Go** WebSocket hub + **SQLite** history, **Rea
 - Last **50** messages replayed on connect; **SQLite timestamp** parsing supports multiple on-disk formats.
 - **`GET /health`** with SQLite ping (503 when degraded); **`GET /metrics`** for Prometheus.
 - **Abuse controls:** max username/message size (runes), per-IP **WebSocket upgrade** rate limit, per-client **message** rate limit, optional **`Origin`** allowlist.
-- Structured JSON logs (`slog`), graceful shutdown, GitHub Actions (lint, test + coverage artifact, WebSocket load smoke, ESLint, build), Dependabot, Docker Compose.
+- Structured JSON logs (`slog`), graceful shutdown, GitHub Actions (lint, test + coverage artifact, WebSocket load smoke, ESLint, build), Dependabot, Docker Compose, single-service production image.
 - **Measured:** zero message loss with **p99 ≈ 6 ms** broadcast delivery at 25 concurrent clients, and zero loss at 50 (Apple M1, Go 1.26); reproducible harness and honest O(N²) fan-out scaling notes in [docs/LOAD_TESTING.md](docs/LOAD_TESTING.md).
 
 **Frontend** is intentionally a focused CRA SPA—see [docs/FRONTEND.md](docs/FRONTEND.md) for accessibility, performance notes, and how this repo positions **backend/platform** depth vs UI framework churn.
@@ -29,7 +29,16 @@ docker compose up --build
 
 Open **http://localhost:3000** (UI) and **http://localhost:8080/health** (API health).
 
-### Option B — Native (best for development)
+### Option B — Production-style single container
+
+```bash
+docker build -t chatster:prod .
+docker run --rm -p 8080:8080 -v chatster-data:/data chatster:prod
+```
+
+Open **http://localhost:8080**. The Go backend serves the React build, API, metrics, and WebSocket from one origin.
+
+### Option C — Native (best for development)
 
 **Terminal 1 — API**
 
@@ -51,6 +60,7 @@ Open **http://localhost:3000**. Use two browser tabs or windows to test live mes
 |----------|--------|---------|
 | `CHATSTER_HTTP_ADDR` | Backend | Listen address (default `:8080`). |
 | `CHATSTER_DB_PATH` | Backend | SQLite file (default `./chatster.db`). |
+| `CHATSTER_STATIC_DIR` | Backend | Optional built frontend directory served by the Go backend. |
 | `CHATSTER_ALLOWED_ORIGINS` | Backend | Comma-separated `Origin` values for WebSocket; **empty = allow all** (dev only). |
 | `CHATSTER_WS_UPGRADE_RPS` | Backend | WS upgrades per IP per second (default `5`; `0` disables). |
 | `CHATSTER_WS_UPGRADE_BURST` | Backend | Token bucket burst for WS upgrades (default `10`). |
@@ -79,6 +89,7 @@ See `backend/.env.example` and `frontend/.env.example`.
 - [Threat model](docs/THREAT_MODEL.md) — security narrative and controls.
 - [Observability](docs/OBSERVABILITY.md) — metrics, logs, SLO sketch, tracing path.
 - [Load testing](docs/LOAD_TESTING.md) — reproducible WebSocket load harness.
+- [Deployment](docs/DEPLOYMENT.md) — single-container production image and host checklist.
 - [Frontend engineering](docs/FRONTEND.md) — a11y, perf budget, positioning.
 - [Non-goals](docs/NON_GOALS.md) — explicit out-of-scope items.
 - [ADR index](docs/adr/README.md) — architecture decisions.

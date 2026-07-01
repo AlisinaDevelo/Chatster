@@ -9,6 +9,7 @@ import (
 func TestFromEnvDefaults(t *testing.T) {
 	t.Setenv("CHATSTER_HTTP_ADDR", "")
 	t.Setenv("CHATSTER_DB_PATH", "")
+	t.Setenv("CHATSTER_STATIC_DIR", "")
 	t.Setenv("CHATSTER_ALLOWED_ORIGINS", "")
 	t.Setenv("CHATSTER_WS_UPGRADE_RPS", "")
 	t.Setenv("CHATSTER_WS_UPGRADE_BURST", "")
@@ -18,6 +19,9 @@ func TestFromEnvDefaults(t *testing.T) {
 	}
 	if cfg.DBPath != defaultDBPath {
 		t.Fatalf("DBPath: got %q want %q", cfg.DBPath, defaultDBPath)
+	}
+	if cfg.StaticDir != "" {
+		t.Fatalf("StaticDir: got %q want empty", cfg.StaticDir)
 	}
 	if cfg.DisableWSRateLimit {
 		t.Fatal("expected WS rate limit enabled by default")
@@ -36,6 +40,7 @@ func TestFromEnvDefaults(t *testing.T) {
 func TestFromEnvOverride(t *testing.T) {
 	t.Setenv("CHATSTER_HTTP_ADDR", ":9999")
 	t.Setenv("CHATSTER_DB_PATH", "/tmp/x.db")
+	t.Setenv("CHATSTER_STATIC_DIR", "/app/static")
 	t.Setenv("CHATSTER_ALLOWED_ORIGINS", " https://a.test , https://b.test ")
 	t.Setenv("CHATSTER_WS_UPGRADE_RPS", "12")
 	t.Setenv("CHATSTER_WS_UPGRADE_BURST", "3")
@@ -44,6 +49,9 @@ func TestFromEnvOverride(t *testing.T) {
 	cfg := FromEnv()
 	if cfg.HTTPAddr != ":9999" || cfg.DBPath != "/tmp/x.db" {
 		t.Fatalf("unexpected cfg: %+v", cfg)
+	}
+	if cfg.StaticDir != "/app/static" {
+		t.Fatalf("StaticDir: got %q want /app/static", cfg.StaticDir)
 	}
 	if len(cfg.AllowedOrigins) != 2 || cfg.AllowedOrigins[0] != "https://a.test" {
 		t.Fatalf("AllowedOrigins: %+v", cfg.AllowedOrigins)

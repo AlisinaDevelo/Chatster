@@ -20,6 +20,7 @@ const (
 type Config struct {
 	HTTPAddr                string
 	DBPath                  string
+	StaticDir               string
 	AllowedOrigins          []string
 	WSUpgradeRPS            float64
 	WSUpgradeBurst          int
@@ -33,6 +34,7 @@ type Config struct {
 //
 // CHATSTER_HTTP_ADDR — listen address (default ":8080").
 // CHATSTER_DB_PATH — SQLite file path (default "./chatster.db").
+// CHATSTER_STATIC_DIR — optional directory of built frontend assets to serve from the backend.
 // CHATSTER_ALLOWED_ORIGINS — comma-separated WebSocket Origin allowlist; empty = allow all (dev-friendly).
 // CHATSTER_WS_UPGRADE_RPS — max WS upgrades per IP per second (default 5); "0" disables limiting.
 // CHATSTER_WS_UPGRADE_BURST — token bucket burst for WS upgrades (default 10).
@@ -42,6 +44,7 @@ func FromEnv() Config {
 	cfg := Config{
 		HTTPAddr:       strings.TrimSpace(os.Getenv("CHATSTER_HTTP_ADDR")),
 		DBPath:         strings.TrimSpace(os.Getenv("CHATSTER_DB_PATH")),
+		StaticDir:      strings.TrimSpace(os.Getenv("CHATSTER_STATIC_DIR")),
 		AllowedOrigins: splitCSV(os.Getenv("CHATSTER_ALLOWED_ORIGINS")),
 		WSUpgradeRPS:   defaultWSUpgradeRPS,
 		WSUpgradeBurst: defaultWSUpgradeBurst,

@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -128,6 +129,84 @@ func TestMessagesEndpointRejectsInvalidLimit(t *testing.T) {
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("want 400, got %d", resp.StatusCode)
+	}
+}
+
+func TestMessagesEndpointReturnsEmptyArray(t *testing.T) {
+	cfg, database, hub, cleanup := testStack(t)
+	defer cleanup()
+
+	srv := httptest.NewServer(mount(cfg, hub, database))
+	defer srv.Close()
+
+	resp, err := http.Get(srv.URL + "/api/messages")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status %d", resp.StatusCode)
+	}
+
+	var payload struct {
+		Messages []Message `json:"messages"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload.Messages == nil {
+		t.Fatal("empty message history should encode as []")
+	}
+	if len(payload.Messages) != 0 {
+		t.Fatalf("messages: got %d want 0", len(payload.Messages))
+	}
+}
+
+func TestStaticHandlerServesReactBuildAndFallsBackToIndex(t *testing.T) {
+	cfg, database, hub, cleanup := testStack(t)
+	defer cleanup()
+
+	staticDir := t.TempDir()
+	if err := os.Mkdir(filepath.Join(staticDir, "static"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(staticDir, "index.html"), []byte("<html>chatster shell</html>"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(staticDir, "static", "app.js"), []byte("console.log('chatster')"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg.StaticDir = staticDir
+
+	srv := httptest.NewServer(mount(cfg, hub, database))
+	defer srv.Close()
+
+	for _, path := range []string{"/", "/rooms/general"} {
+		resp, err := http.Get(srv.URL + path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		body, _ := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("%s status %d", path, resp.StatusCode)
+		}
+		if !strings.Contains(string(body), "chatster shell") {
+			t.Fatalf("%s should serve index fallback, got %q", path, body)
+		}
+	}
+
+	resp, err := http.Get(srv.URL + "/static/app.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("asset status %d", resp.StatusCode)
+	}
+	if !strings.Contains(string(body), "console.log") {
+		t.Fatalf("asset body: %q", body)
 	}
 }
 

@@ -1,0 +1,13 @@
+.git
+.github
+**/.DS_Store
+**/node_modules
+**/build
+**/coverage
+**/*.db
+**/*.db-shm
+**/*.db-wal
+backend/coverage.out
+backend/coverage-summary.txt
+backend/wsload-smoke.json
+backend/server-smoke.log

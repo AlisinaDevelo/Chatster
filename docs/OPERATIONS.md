@@ -8,6 +8,7 @@ Runbook-style notes for operating Chatster beyond local development.
 |----------|---------|-------------|
 | `CHATSTER_HTTP_ADDR` | `:8080` | HTTP listen address |
 | `CHATSTER_DB_PATH` | `./chatster.db` | SQLite database file path |
+| `CHATSTER_STATIC_DIR` | _(empty)_ | Optional built frontend directory served by the Go backend |
 | `CHATSTER_ALLOWED_ORIGINS` | _(empty)_ | Comma-separated WebSocket `Origin` values; empty allows all origins |
 | `CHATSTER_WS_UPGRADE_RPS` | `5` | Per-IP WebSocket upgrades per second (`0` disables) |
 | `CHATSTER_WS_UPGRADE_BURST` | `10` | Burst size for the upgrade limiter |
@@ -43,6 +44,8 @@ The server handles **SIGINT** and **SIGTERM** and attempts **graceful HTTP shutd
 
 ## Docker
 
+### Local two-service compose
+
 From the repository root:
 
 ```bash
@@ -53,6 +56,23 @@ docker compose up --build
 - Web UI: [http://localhost:3000](http://localhost:3000) (static build; browser connects to `ws://localhost:8080/ws`)
 
 SQLite data persists in the **`chatster-data`** Docker volume.
+
+### Production single-service image
+
+The root [Dockerfile](../Dockerfile) builds the React app and Go backend into one container. The Go server serves the React build from `CHATSTER_STATIC_DIR`, so browser HTTP, API calls, and WebSockets share one origin.
+
+```bash
+docker build -t chatster:prod .
+docker run --rm \
+  -p 8080:8080 \
+  -v chatster-data:/data \
+  -e CHATSTER_ALLOWED_ORIGINS=http://localhost:8080 \
+  chatster:prod
+```
+
+- UI/API: [http://localhost:8080](http://localhost:8080)
+- Health: [http://localhost:8080/health](http://localhost:8080/health)
+- WebSocket: `ws://localhost:8080/ws`
 
 ## Persistence
 
