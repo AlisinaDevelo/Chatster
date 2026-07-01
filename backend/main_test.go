@@ -138,6 +138,10 @@ func TestMetricsEndpoint(t *testing.T) {
 	srv := httptest.NewServer(mount(cfg, hub, database))
 	defer srv.Close()
 
+	if _, err := saveMessageObserved(database, "alice", "metrics probe", "message"); err != nil {
+		t.Fatalf("save metrics probe: %v", err)
+	}
+
 	resp, err := http.Get(srv.URL + "/metrics")
 	if err != nil {
 		t.Fatal(err)
@@ -149,6 +153,12 @@ func TestMetricsEndpoint(t *testing.T) {
 	}
 	if !strings.Contains(string(body), "chatster_") {
 		t.Fatalf("metrics body missing chatster_ prefix: %s", body[:min(200, len(body))])
+	}
+	if !strings.Contains(string(body), "chatster_chat_message_persist_duration_seconds_bucket") {
+		t.Fatalf("metrics body missing persist latency histogram")
+	}
+	if !strings.Contains(string(body), "chatster_websocket_broadcast_fanout_duration_seconds_bucket") {
+		t.Fatalf("metrics body missing broadcast fanout latency histogram")
 	}
 }
 

@@ -154,7 +154,7 @@ func (h *Hub) disconnectClientLocked(client *Client) {
 		Type:     "notification",
 	}
 
-	if _, err := h.database.SaveMessage(notification.Username, notification.Content, notification.Type); err != nil {
+	if _, err := saveMessageObserved(h.database, notification.Username, notification.Content, notification.Type); err != nil {
 		slog.Warn("save leave notification", "err", err)
 	}
 
@@ -178,7 +178,7 @@ func (h *Hub) run() {
 				Type:     "notification",
 			}
 
-			_, err := h.database.SaveMessage(notification.Username, notification.Content, notification.Type)
+			_, err := saveMessageObserved(h.database, notification.Username, notification.Content, notification.Type)
 			if err != nil {
 				slog.Warn("save join notification", "err", err)
 			}
@@ -191,6 +191,7 @@ func (h *Hub) run() {
 			h.mutex.Unlock()
 
 		case message := <-h.broadcast:
+			started := time.Now()
 			h.mutex.Lock()
 			for client := range h.clients {
 				if !client.enqueue(message) {
@@ -200,6 +201,7 @@ func (h *Hub) run() {
 				}
 			}
 			h.mutex.Unlock()
+			metrics.BroadcastFanoutDuration.Observe(time.Since(started).Seconds())
 		}
 	}
 }
@@ -277,6 +279,17 @@ func (c *Client) auditRejectedMessage(reason, content string) {
 	if _, err := c.Hub.database.SaveModerationEvent(c.ID, c.username(), reason, content); err != nil {
 		slog.Warn("save moderation audit event", "err", err, "reason", reason, "session_id", c.ID)
 	}
+}
+
+func saveMessageObserved(database *db.DB, username, content, msgType string) (*db.Message, error) {
+	started := time.Now()
+	msg, err := database.SaveMessage(username, content, msgType)
+	result := "ok"
+	if err != nil {
+		result = "error"
+	}
+	metrics.MessagePersistDuration.WithLabelValues(result).Observe(time.Since(started).Seconds())
+	return msg, err
 }
 
 func (c *Client) writeMessages() {
@@ -375,7 +388,7 @@ func (c *Client) readMessages() {
 		msg.Content = body
 		msg.Username = c.username()
 
-		dbMsg, err := c.Hub.database.SaveMessage(msg.Username, msg.Content, msg.Type)
+		dbMsg, err := saveMessageObserved(c.Hub.database, msg.Username, msg.Content, msg.Type)
 		if err != nil {
 			slog.Warn("save message", "err", err)
 		} else {

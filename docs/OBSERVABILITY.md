@@ -21,12 +21,30 @@ Namespaces and names follow `chatster_*` where applicable. Inspect `/metrics` on
 | `chatster_websocket_outbound_drops_total{reason}` | Counter | Outbound drops by reason: `slow_client`, `write_error`. |
 | `chatster_chat_messages_ingested_total` | Counter | Valid chat messages accepted for persistence and broadcast. |
 | `chatster_chat_messages_rejected_total{reason}` | Counter | Rejected chat inputs by reason: `invalid_username`, `invalid_body`, `rate_limited`. |
+| `chatster_chat_message_persist_duration_seconds{result}` | Histogram | SQLite persistence latency for accepted chat/system messages by `ok` / `error`. |
+| `chatster_websocket_broadcast_fanout_duration_seconds` | Histogram | Hub fanout enqueue latency for each broadcast message. |
 
-Suggested **recording rules / dashboards** (Grafana) for a real deployment:
+Import [grafana/chatster-dashboard.json](grafana/chatster-dashboard.json) into Grafana with a Prometheus datasource to view:
 
-- **Traffic:** rate of WS upgrades, rate of messages persisted.
-- **Saturation:** connected clients, goroutine count (default `go_*` metrics).
-- **Errors:** WS upgrade failures, outbound drops, rejected messages, DB errors (expose via counters when you add labeled error paths).
+- **Traffic:** connected clients, message ingest rate, upgrade rate.
+- **Latency:** p95 SQLite persist latency and p99 broadcast fanout latency.
+- **Errors/abuse:** rejected messages by reason and outbound drops by reason.
+
+Useful PromQL snippets:
+
+```promql
+histogram_quantile(
+  0.95,
+  sum(rate(chatster_chat_message_persist_duration_seconds_bucket[5m])) by (le, result)
+)
+```
+
+```promql
+histogram_quantile(
+  0.99,
+  sum(rate(chatster_websocket_broadcast_fanout_duration_seconds_bucket[5m])) by (le)
+)
+```
 
 ## SLO sketch (example — not a promise)
 
@@ -35,10 +53,11 @@ These are **illustrative** targets for a small internal deployment; tune with re
 | SLI | Example SLO | Measurement idea |
 |-----|-------------|------------------|
 | API availability | 99.5% monthly | Synthetic checks on `/health` + edge LB metrics. |
-| Message send latency (p99) | < 500 ms internal | Client-side beacon or server histogram once you add one. |
+| Message persist latency (p95) | < 50 ms internal | `chatster_chat_message_persist_duration_seconds` histogram. |
+| Broadcast fanout latency (p99) | < 100 ms internal | `chatster_websocket_broadcast_fanout_duration_seconds` histogram. |
 | WS connection success | > 99% of attempts (non-abusive) | Ratio `successful upgrades / attempts` from metrics. |
 
-Chatster does **not** yet ship histogram buckets for message latency; adding `prometheus.Histogram` around `SaveMessage` and broadcast would be the natural next step.
+Client-perceived message send latency still needs a browser-side beacon or explicit ack path; the current server histograms cover persistence and hub fanout.
 
 ## Tracing (recommended next step)
 
