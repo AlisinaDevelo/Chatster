@@ -8,8 +8,15 @@ GitHub Actions workflow **`.github/workflows/ci.yml`** runs on every push and pu
 
 | Job | What it does |
 |-----|----------------|
-| **backend** | `golangci-lint`, `go test -race` with **coverage** (`coverage.out` uploaded as an artifact), `go vet` |
+| **backend** | `golangci-lint`, `go test -race` with **coverage**, `go vet`, tiny WebSocket load smoke |
 | **frontend** | `npm ci`, `npm run lint`, `npm run test:ci`, `npm run build` |
+
+The backend job uploads a **`backend-runtime-proof`** artifact containing:
+
+- `coverage.out` — raw Go coverage profile.
+- `coverage-summary.txt` — human-readable `go tool cover -func` summary.
+- `wsload-smoke.json` — 4-client / 3-message WebSocket fanout smoke result with `-fail-on-loss`.
+- `server-smoke.log` — backend log from the smoke run.
 
 Requirements: Go **1.22**, Node **20**, [golangci-lint](https://golangci-lint.run/) config at **`.golangci.yml`** (repo root), and a lockfile (`frontend/package-lock.json`) in sync with `package.json`.
 

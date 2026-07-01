@@ -31,11 +31,52 @@ jobs:
           working-directory: backend
       - run: go mod download
       - run: go test -race -coverprofile=coverage.out ./...
+      - name: Summarize Go coverage
+        run: go tool cover -func=coverage.out | tee coverage-summary.txt
       - run: go vet ./...
+      - name: Run WebSocket load smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          export CHATSTER_HTTP_ADDR=127.0.0.1:18080
+          export CHATSTER_DB_PATH="${RUNNER_TEMP}/chatster-ci-smoke.db"
+          export CHATSTER_WS_UPGRADE_RPS=0
+          export CHATSTER_MESSAGE_RPS=0
+
+          go run . > server-smoke.log 2>&1 &
+          server_pid=$!
+          trap 'kill "${server_pid}" 2>/dev/null || true' EXIT
+
+          for _ in {1..30}; do
+            if curl -fsS "http://${CHATSTER_HTTP_ADDR}/health" >/dev/null 2>&1; then
+              break
+            fi
+            sleep 1
+          done
+
+          curl -fsS "http://${CHATSTER_HTTP_ADDR}/health" >/dev/null
+
+          go run ./cmd/wsload \
+            -url "ws://${CHATSTER_HTTP_ADDR}/ws" \
+            -clients 4 \
+            -messages 3 \
+            -settle-for 250ms \
+            -send-interval 10ms \
+            -drain-for 1s \
+            -fail-on-loss \
+            > wsload-smoke.json
+
+          kill "${server_pid}" 2>/dev/null || true
+          trap - EXIT
       - uses: actions/upload-artifact@v4
         with:
-          name: go-coverage
-          path: backend/coverage.out
+          name: backend-runtime-proof
+          path: |
+            backend/coverage.out
+            backend/coverage-summary.txt
+            backend/wsload-smoke.json
+            backend/server-smoke.log
           if-no-files-found: error
 
   frontend:

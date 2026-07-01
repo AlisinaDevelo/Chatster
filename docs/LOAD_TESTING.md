@@ -35,6 +35,23 @@ The command prints a JSON summary. Key fields:
 - `settle_for` — startup grace period after username setup; this lets the hub register every WebSocket before the timed send window.
 - `send_interval` — per-client pacing between messages; use a non-zero value for a sustained run instead of a single microburst.
 
+## CI smoke
+
+The GitHub Actions backend job starts a local Chatster server with WS/message rate limits disabled and runs:
+
+```bash
+go run ./cmd/wsload \
+  -url ws://127.0.0.1:18080/ws \
+  -clients 4 \
+  -messages 3 \
+  -settle-for 250ms \
+  -send-interval 10ms \
+  -drain-for 1s \
+  -fail-on-loss
+```
+
+The JSON result is uploaded as `wsload-smoke.json` in the `backend-runtime-proof` artifact. This is intentionally small and non-flaky; benchmark-scale runs should remain manual and machine-labeled.
+
 ## Results
 
 Measured on an **Apple M1 (8 cores), macOS 26.5.1, Go 1.26.3**, 2026-06-24, with both rate limiters disabled and a **fresh SQLite database per run**. Each client sent 20 messages after a 1 s settle period, paced at 5 ms; every message is broadcast to all connected clients, so deliveries scale as O(clients²). The 25-client row is a single representative run; the 50-client row is the **median of 5 runs**.
