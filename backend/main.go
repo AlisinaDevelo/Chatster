@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -271,6 +273,12 @@ func (c *Client) sendRateLimitNotice() {
 	}
 }
 
+func (c *Client) auditRejectedMessage(reason, content string) {
+	if _, err := c.Hub.database.SaveModerationEvent(c.ID, c.username(), reason, content); err != nil {
+		slog.Warn("save moderation audit event", "err", err, "reason", reason, "session_id", c.ID)
+	}
+}
+
 func (c *Client) writeMessages() {
 	for {
 		select {
@@ -339,7 +347,8 @@ func (c *Client) readMessages() {
 			name := strings.TrimSpace(msg.Content)
 			if !validUsername(name) {
 				metrics.MessagesRejected.WithLabelValues("invalid_username").Inc()
-				slog.Warn("invalid username rejected")
+				c.auditRejectedMessage("invalid_username", msg.Content)
+				slog.Warn("invalid username rejected", "session_id", c.ID)
 				continue
 			}
 			c.setUsername(name)
@@ -352,12 +361,14 @@ func (c *Client) readMessages() {
 		body := strings.TrimSpace(msg.Content)
 		if !validMessageBody(body) {
 			metrics.MessagesRejected.WithLabelValues("invalid_body").Inc()
-			slog.Warn("invalid message rejected")
+			c.auditRejectedMessage("invalid_body", msg.Content)
+			slog.Warn("invalid message rejected", "session_id", c.ID)
 			continue
 		}
 		if !c.allowMessage() {
 			metrics.MessagesRejected.WithLabelValues("rate_limited").Inc()
-			slog.Warn("message rate limited")
+			c.auditRejectedMessage("rate_limited", body)
+			slog.Warn("message rate limited", "session_id", c.ID)
 			c.sendRateLimitNotice()
 			continue
 		}
@@ -385,6 +396,14 @@ func clientIP(r *http.Request) string {
 	return host
 }
 
+func newSessionID() string {
+	var b [16]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return fmt.Sprintf("sess_%d", time.Now().UnixNano())
+	}
+	return "sess_" + hex.EncodeToString(b[:])
+}
+
 func serveWs(hub *Hub, cfg config.Config, up websocket.Upgrader, wsRL *ratelimit.WSUpgrade, w http.ResponseWriter, r *http.Request) {
 	ip := clientIP(r)
 	if wsRL != nil && !wsRL.Allow(ip) {
@@ -408,7 +427,7 @@ func serveWs(hub *Hub, cfg config.Config, up websocket.Upgrader, wsRL *ratelimit
 	metrics.ConnectedClients.Inc()
 
 	client := &Client{
-		ID:         r.RemoteAddr,
+		ID:         newSessionID(),
 		Conn:       conn,
 		Username:   "Anonymous",
 		Hub:        hub,

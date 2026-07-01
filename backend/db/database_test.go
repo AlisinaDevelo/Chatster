@@ -78,6 +78,13 @@ func TestOpenAppliesSchemaMigrations(t *testing.T) {
 	if name != "create_messages" {
 		t.Fatalf("migration name: got %q want %q", name, "create_messages")
 	}
+
+	if err := database.QueryRow("SELECT name FROM schema_migrations WHERE version = 2").Scan(&name); err != nil {
+		t.Fatalf("schema migration row: %v", err)
+	}
+	if name != "create_moderation_audit_log" {
+		t.Fatalf("migration name: got %q want %q", name, "create_moderation_audit_log")
+	}
 }
 
 func TestOpenMigrationsAreIdempotent(t *testing.T) {
@@ -169,5 +176,40 @@ func TestGetRecentMessagesOrder(t *testing.T) {
 	}
 	if got := []string{msgs[0].Content, msgs[1].Content, msgs[2].Content}; got[0] != "first" || got[1] != "second" || got[2] != "third" {
 		t.Fatalf("chronological order: %+v", got)
+	}
+}
+
+func TestSaveModerationEventPersistsAuditMetadata(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "audit.db")
+	database, err := Open(path)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	t.Cleanup(func() { _ = database.Close() })
+
+	event, err := database.SaveModerationEvent("sess_abc", "alice", "invalid_body", "   ")
+	if err != nil {
+		t.Fatalf("SaveModerationEvent: %v", err)
+	}
+	if event.ID == 0 {
+		t.Fatal("expected non-zero id")
+	}
+	if event.Timestamp.IsZero() {
+		t.Fatal("expected timestamp")
+	}
+
+	var sessionID, username, reason string
+	var contentLength int
+	if err := database.QueryRow(`
+SELECT session_id, username, reason, content_length
+FROM moderation_audit_log
+WHERE id = ?`, event.ID).Scan(&sessionID, &username, &reason, &contentLength); err != nil {
+		t.Fatalf("query audit row: %v", err)
+	}
+	if sessionID != "sess_abc" || username != "alice" || reason != "invalid_body" {
+		t.Fatalf("unexpected audit metadata: session=%q username=%q reason=%q", sessionID, username, reason)
+	}
+	if contentLength != 3 {
+		t.Fatalf("content_length: got %d want 3", contentLength)
 	}
 }

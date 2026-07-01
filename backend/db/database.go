@@ -5,11 +5,14 @@ import (
 	"fmt"
 	"log"
 	"time"
+	"unicode/utf8"
 
 	_ "github.com/mattn/go-sqlite3" // Driver registers with database/sql as "sqlite3".
 )
 
 const sqliteBusyTimeoutMS = 5000
+
+const maxAuditPreviewRunes = 256
 
 type migration struct {
 	version int
@@ -30,6 +33,22 @@ CREATE TABLE IF NOT EXISTS messages (
 	timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
 );`,
 	},
+	{
+		version: 2,
+		name:    "create_moderation_audit_log",
+		sql: `
+CREATE TABLE IF NOT EXISTS moderation_audit_log (
+	id INTEGER PRIMARY KEY AUTOINCREMENT,
+	session_id TEXT NOT NULL,
+	username TEXT NOT NULL,
+	reason TEXT NOT NULL,
+	content_preview TEXT NOT NULL,
+	content_length INTEGER NOT NULL,
+	timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_moderation_audit_log_timestamp
+	ON moderation_audit_log(timestamp);`,
+	},
 }
 
 // Message represents a chat message
@@ -39,6 +58,17 @@ type Message struct {
 	Content   string    `json:"content"`
 	Type      string    `json:"type"`
 	Timestamp time.Time `json:"timestamp"`
+}
+
+// ModerationEvent records a rejected chat input for abuse/debug auditing.
+type ModerationEvent struct {
+	ID             int64     `json:"id"`
+	SessionID      string    `json:"session_id"`
+	Username       string    `json:"username"`
+	Reason         string    `json:"reason"`
+	ContentPreview string    `json:"content_preview"`
+	ContentLength  int       `json:"content_length"`
+	Timestamp      time.Time `json:"timestamp"`
 }
 
 // DB is our database wrapper
@@ -183,6 +213,47 @@ func (db *DB) SaveMessage(username, content, msgType string) (*Message, error) {
 	}, nil
 }
 
+// SaveModerationEvent records a rejected message or username attempt.
+func (db *DB) SaveModerationEvent(sessionID, username, reason, content string) (*ModerationEvent, error) {
+	contentPreview := truncateRunes(content, maxAuditPreviewRunes)
+	contentLength := utf8.RuneCountInString(content)
+	now := time.Now()
+
+	stmt, err := db.Prepare(`
+INSERT INTO moderation_audit_log(
+	session_id,
+	username,
+	reason,
+	content_preview,
+	content_length,
+	timestamp
+) VALUES(?, ?, ?, ?, ?, ?)`)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = stmt.Close() }()
+
+	result, err := stmt.Exec(sessionID, username, reason, contentPreview, contentLength, now)
+	if err != nil {
+		return nil, err
+	}
+
+	id, err := result.LastInsertId()
+	if err != nil {
+		return nil, err
+	}
+
+	return &ModerationEvent{
+		ID:             id,
+		SessionID:      sessionID,
+		Username:       username,
+		Reason:         reason,
+		ContentPreview: contentPreview,
+		ContentLength:  contentLength,
+		Timestamp:      now,
+	}, nil
+}
+
 // GetRecentMessages retrieves the most recent messages from the database
 func (db *DB) GetRecentMessages(limit int) ([]Message, error) {
 	rows, err := db.Query("SELECT id, username, content, type, timestamp FROM messages ORDER BY timestamp DESC LIMIT ?", limit)
@@ -219,6 +290,15 @@ func (db *DB) GetRecentMessages(limit int) ([]Message, error) {
 	}
 
 	return messages, nil
+}
+
+func truncateRunes(s string, limit int) string {
+	if limit < 1 || utf8.RuneCountInString(s) <= limit {
+		return s
+	}
+
+	runes := []rune(s)
+	return string(runes[:limit])
 }
 
 // Close closes the database connection

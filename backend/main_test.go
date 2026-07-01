@@ -282,6 +282,14 @@ func TestWebSocketRejectedUsernameKeepsAnonymousIdentity(t *testing.T) {
 	if msg.Username != "Anonymous" {
 		t.Fatalf("invalid username should keep anonymous identity, got %q", msg.Username)
 	}
+
+	event := latestModerationEvent(t, database)
+	if event.Reason != "invalid_username" {
+		t.Fatalf("audit reason: got %q want invalid_username", event.Reason)
+	}
+	if !strings.HasPrefix(event.SessionID, "sess_") {
+		t.Fatalf("audit session id should be anonymous server id, got %q", event.SessionID)
+	}
 }
 
 func TestWebSocketRejectsInvalidMessages(t *testing.T) {
@@ -312,6 +320,9 @@ func TestWebSocketRejectsInvalidMessages(t *testing.T) {
 	}
 	if got := messageContentCount(t, database, oversizedBody); got != 0 {
 		t.Fatalf("oversized message should not persist, got %d", got)
+	}
+	if got := moderationReasonCount(t, database, "invalid_body"); got != 2 {
+		t.Fatalf("invalid bodies should be audited twice, got %d", got)
 	}
 }
 
@@ -409,6 +420,24 @@ func TestWebSocketMessageRateLimit(t *testing.T) {
 	body, _ := io.ReadAll(resp.Body)
 	if !strings.Contains(string(body), `chatster_chat_messages_rejected_total{reason="rate_limited"}`) {
 		t.Fatalf("metrics missing rate_limited rejection counter")
+	}
+	if got := moderationReasonCount(t, database, "rate_limited"); got != 1 {
+		t.Fatalf("rate limited message should be audited once, got %d", got)
+	}
+}
+
+func TestNewSessionIDGeneratesAnonymousOpaqueIDs(t *testing.T) {
+	first := newSessionID()
+	second := newSessionID()
+
+	if !strings.HasPrefix(first, "sess_") {
+		t.Fatalf("session id prefix: got %q", first)
+	}
+	if len(first) < len("sess_")+16 {
+		t.Fatalf("session id should include enough entropy, got %q", first)
+	}
+	if first == second {
+		t.Fatalf("session ids should be unique, got %q twice", first)
 	}
 }
 
@@ -512,4 +541,34 @@ func messageContentCount(t *testing.T, database *db.DB, content string) int {
 		t.Fatalf("count messages by content: %v", err)
 	}
 	return count
+}
+
+func moderationReasonCount(t *testing.T, database *db.DB, reason string) int {
+	t.Helper()
+	var count int
+	if err := database.QueryRow("SELECT COUNT(*) FROM moderation_audit_log WHERE reason = ?", reason).Scan(&count); err != nil {
+		t.Fatalf("count moderation reasons: %v", err)
+	}
+	return count
+}
+
+func latestModerationEvent(t *testing.T, database *db.DB) db.ModerationEvent {
+	t.Helper()
+	var event db.ModerationEvent
+	if err := database.QueryRow(`
+SELECT id, session_id, username, reason, content_preview, content_length, timestamp
+FROM moderation_audit_log
+ORDER BY id DESC
+LIMIT 1`).Scan(
+		&event.ID,
+		&event.SessionID,
+		&event.Username,
+		&event.Reason,
+		&event.ContentPreview,
+		&event.ContentLength,
+		&event.Timestamp,
+	); err != nil {
+		t.Fatalf("latest moderation event: %v", err)
+	}
+	return event
 }
