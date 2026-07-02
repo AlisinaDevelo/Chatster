@@ -14,7 +14,7 @@ Real-time chat reference stack: **Go** WebSocket hub + **SQLite** history, **Rea
 - Last **50** messages replayed on connect; **SQLite timestamp** parsing supports multiple on-disk formats.
 - **`GET /health`** with SQLite ping (503 when degraded); **`GET /metrics`** for Prometheus.
 - **Abuse controls:** max username/message size (runes), per-IP **WebSocket upgrade** rate limit, per-client **message** rate limit, optional **`Origin`** allowlist.
-- Structured JSON logs (`slog`), graceful shutdown, GitHub Actions (lint, test + coverage artifact, WebSocket load smoke, ESLint, build), Dependabot, Docker Compose, single-service production image.
+- Structured JSON logs (`slog`), graceful shutdown, GitHub Actions (lint, test + coverage artifact, WebSocket load smoke, ESLint, build, production image smoke), Dependabot, Docker Compose, single-service production image.
 - **Measured:** zero message loss with **p99 ≈ 6 ms** broadcast delivery at 25 concurrent clients, and zero loss at 50 (Apple M1, Go 1.26); reproducible harness and honest O(N²) fan-out scaling notes in [docs/LOAD_TESTING.md](docs/LOAD_TESTING.md).
 
 **Frontend** is intentionally a focused CRA SPA—see [docs/FRONTEND.md](docs/FRONTEND.md) for accessibility, performance notes, and how this repo positions **backend/platform** depth vs UI framework churn.
@@ -78,6 +78,7 @@ See `backend/.env.example` and `frontend/.env.example`.
 | `make test` | Backend tests + frontend tests (CI mode). |
 | `make lint` | golangci-lint + ESLint (requires golangci-lint installed locally). |
 | `make docker-up` | `docker compose up --build`. |
+| `docker build -t chatster:prod .` | Build the single-service production image; CI also smokes this path. |
 | `cd backend && go test -race ./...` | Go tests (includes HTTP + WebSocket integration tests). |
 | `cd frontend && npm run test:ci` | Jest once. |
 | `cd frontend && npm run build` | Optimized static build. |

@@ -10,6 +10,7 @@ GitHub Actions workflow **`.github/workflows/ci.yml`** runs on every push and pu
 |-----|----------------|
 | **backend** | `golangci-lint`, `go test -race` with **coverage**, `go vet`, tiny WebSocket load smoke |
 | **frontend** | `npm ci`, `npm run lint`, `npm run test:ci`, `npm run build` |
+| **production-image** | Builds the root Docker production image and smokes the running single-container app |
 
 The backend job uploads a **`backend-runtime-proof`** artifact containing:
 
@@ -19,6 +20,8 @@ The backend job uploads a **`backend-runtime-proof`** artifact containing:
 - `server-smoke.log` — backend log from the smoke run.
 
 Requirements: Go **1.22**, Node **20**, [golangci-lint](https://golangci-lint.run/) config at **`.golangci.yml`** (repo root), and a lockfile (`frontend/package-lock.json`) in sync with `package.json`.
+
+The production image job waits for `/health`, then checks the React shell at `/`, SPA fallback at `/rooms/general`, empty history from `/api/messages?limit=1`, and Prometheus output from `/metrics`.
 
 ## Dependency updates
 
@@ -80,7 +83,8 @@ See [OPERATIONS.md](OPERATIONS.md) for health semantics and persistence.
 
 1. `make test` and `make lint`
 2. `cd frontend && npm run build` — serve `frontend/build` behind HTTPS in production; use `wss://` for WebSockets.
-3. Run the Go binary (or container) with a writable directory for SQLite; set `CHATSTER_DB_PATH` explicitly in production.
+3. `docker build -t chatster:prod .` — mirrors the CI production-image check.
+4. Run the Go binary (or container) with a writable directory for SQLite; set `CHATSTER_DB_PATH` explicitly in production.
 
 ## Branching and commits
 

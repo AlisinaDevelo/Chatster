@@ -95,3 +95,39 @@ jobs:
       - run: npm run lint
       - run: npm run test:ci
       - run: npm run build
+
+  production-image:
+    runs-on: ubuntu-latest
+    needs: [backend, frontend]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build production image
+        run: docker build -t chatster:ci .
+      - name: Smoke production image
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          docker run -d --rm \
+            --name chatster-prod-smoke \
+            -p 18081:8080 \
+            -e CHATSTER_ALLOWED_ORIGINS=http://127.0.0.1:18081 \
+            chatster:ci
+
+          trap 'docker logs chatster-prod-smoke || true; docker stop chatster-prod-smoke >/dev/null 2>&1 || true' EXIT
+
+          for _ in {1..30}; do
+            if curl -fsS http://127.0.0.1:18081/health >/dev/null 2>&1; then
+              break
+            fi
+            sleep 1
+          done
+
+          curl -fsS http://127.0.0.1:18081/health
+          curl -fsS http://127.0.0.1:18081/ | grep -q "Chatster"
+          curl -fsS http://127.0.0.1:18081/rooms/general | grep -q "Chatster"
+          curl -fsS "http://127.0.0.1:18081/api/messages?limit=1" | grep -q '"messages":\[\]'
+          curl -fsS http://127.0.0.1:18081/metrics | grep -q "chatster_"
+
+          docker stop chatster-prod-smoke
+          trap - EXIT
