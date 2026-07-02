@@ -4,12 +4,13 @@ import ChatInput from './ChatInput';
 
 describe('ChatInput', () => {
   test('submits trimmed message when connected', async () => {
+    const user = userEvent.setup();
     const sendMessage = jest.fn();
     render(
       <ChatInput sendMessage={sendMessage} hasUsername username="alice" connectionStatus="connected" />
     );
-    await userEvent.type(screen.getByPlaceholderText(/type your message/i), '  hi  ');
-    await userEvent.click(screen.getByRole('button', { name: /send/i }));
+    await user.type(screen.getByPlaceholderText(/type your message/i), '  hi  ');
+    await user.click(screen.getByRole('button', { name: /send/i }));
     expect(sendMessage).toHaveBeenCalledWith('hi');
   });
 
@@ -21,13 +22,14 @@ describe('ChatInput', () => {
   });
 
   test('shows explicit username setup before joining', async () => {
+    const user = userEvent.setup();
     const sendMessage = jest.fn();
     render(
       <ChatInput sendMessage={sendMessage} hasUsername={false} connectionStatus="connected" />
     );
     expect(screen.getByRole('heading', { name: /choose a display name/i })).toBeInTheDocument();
-    await userEvent.type(screen.getByPlaceholderText(/enter your username/i), ' alice ');
-    await userEvent.click(screen.getByRole('button', { name: /join chat/i }));
+    await user.type(screen.getByPlaceholderText(/enter your username/i), ' alice ');
+    await user.click(screen.getByRole('button', { name: /join chat/i }));
     expect(sendMessage).toHaveBeenCalledWith('alice');
   });
 });

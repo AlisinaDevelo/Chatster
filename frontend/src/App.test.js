@@ -54,10 +54,11 @@ describe('App', () => {
   });
 
   test('sends username handshake after joining', async () => {
+    const user = userEvent.setup();
     render(<App />);
     const input = await screen.findByPlaceholderText(/enter your username/i);
-    await userEvent.type(input, 'alice');
-    await userEvent.click(screen.getByRole('button', { name: /join chat/i }));
+    await user.type(input, 'alice');
+    await user.click(screen.getByRole('button', { name: /join chat/i }));
     await waitFor(() => {
       expect(sendMsg).toHaveBeenCalledWith(
         JSON.stringify({ type: 'username', content: 'alice' })
