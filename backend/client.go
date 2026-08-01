@@ -1,0 +1,229 @@
+package main
+
+import (
+	"log/slog"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/AliSinaDevelo/Chatster/internal/config"
+	"github.com/AliSinaDevelo/Chatster/internal/metrics"
+	"github.com/gorilla/websocket"
+	"golang.org/x/time/rate"
+)
+
+const (
+	maxWebSocketReadBytes = 32 * 1024
+	outboundQueueSize     = 256
+	writeWait             = 10 * time.Second
+	pongWait              = 60 * time.Second
+	pingPeriod            = (pongWait * 9) / 10
+)
+
+// Client represents a connected client.
+type Client struct {
+	ID         string
+	Conn       *websocket.Conn
+	Username   string
+	Hub        *Hub
+	writeMu    sync.Mutex // gorilla/websocket allows one writer at a time
+	usernameMu sync.RWMutex
+	msgLimiter *rate.Limiter
+	send       chan Message
+	done       chan struct{}
+	closeOnce  sync.Once
+}
+
+func (c *Client) writeJSON(v any) error {
+	c.writeMu.Lock()
+	defer c.writeMu.Unlock()
+	if err := c.Conn.SetWriteDeadline(time.Now().Add(writeWait)); err != nil {
+		return err
+	}
+	return c.Conn.WriteJSON(v)
+}
+
+func (c *Client) writeControl(messageType int, data []byte, deadline time.Time) error {
+	c.writeMu.Lock()
+	defer c.writeMu.Unlock()
+	return c.Conn.WriteControl(messageType, data, deadline)
+}
+
+func (c *Client) setUsername(username string) {
+	c.usernameMu.Lock()
+	defer c.usernameMu.Unlock()
+	c.Username = username
+}
+
+func (c *Client) username() string {
+	c.usernameMu.RLock()
+	defer c.usernameMu.RUnlock()
+	return c.Username
+}
+
+func (c *Client) enqueue(message Message) bool {
+	select {
+	case <-c.done:
+		return false
+	default:
+	}
+
+	select {
+	case c.send <- message:
+		return true
+	case <-c.done:
+		return false
+	default:
+		return false
+	}
+}
+
+func (c *Client) close() {
+	c.closeOnce.Do(func() {
+		close(c.done)
+		if c.Conn != nil {
+			_ = c.Conn.Close()
+		}
+	})
+}
+
+func (c *Client) allowMessage() bool {
+	return c.msgLimiter == nil || c.msgLimiter.Allow()
+}
+
+func (c *Client) sendRateLimitNotice() {
+	notice := Message{
+		Username: "System",
+		Content:  "You are sending messages too quickly. Please slow down.",
+		Type:     "notification",
+	}
+	if !c.enqueue(notice) {
+		slog.Warn("queue rate limit notice")
+	}
+}
+
+func (c *Client) auditRejectedMessage(reason, content string) {
+	if _, err := c.Hub.database.SaveModerationEvent(c.ID, c.username(), reason, content); err != nil {
+		slog.Warn("save moderation audit event", "err", err, "reason", reason, "session_id", c.ID)
+	}
+}
+
+func (c *Client) writeMessages() {
+	for {
+		select {
+		case message := <-c.send:
+			if err := c.writeJSON(message); err != nil {
+				metrics.WSOutboundDrops.WithLabelValues("write_error").Inc()
+				slog.Warn("write websocket message", "err", err)
+				c.close()
+				return
+			}
+		case <-c.done:
+			return
+		}
+	}
+}
+
+func (c *Client) startHeartbeat(done <-chan struct{}) {
+	ticker := time.NewTicker(pingPeriod)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			if err := c.writeControl(websocket.PingMessage, nil, time.Now().Add(writeWait)); err != nil {
+				slog.Warn("ping client", "err", err)
+				c.close()
+				return
+			}
+		case <-done:
+			return
+		}
+	}
+}
+
+func (c *Client) readMessages() {
+	done := make(chan struct{})
+	go c.startHeartbeat(done)
+
+	defer func() {
+		close(done)
+		metrics.ConnectedClients.Dec()
+		c.Hub.unregister <- c
+		c.close()
+	}()
+
+	c.Conn.SetReadLimit(maxWebSocketReadBytes)
+	if err := c.Conn.SetReadDeadline(time.Now().Add(pongWait)); err != nil {
+		slog.Warn("set read deadline", "err", err)
+		return
+	}
+	c.Conn.SetPongHandler(func(string) error {
+		return c.Conn.SetReadDeadline(time.Now().Add(pongWait))
+	})
+
+	for {
+		var msg Message
+		err := c.Conn.ReadJSON(&msg)
+		if err != nil {
+			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
+				slog.Warn("read message", "err", err)
+			}
+			break
+		}
+
+		if msg.Type == "username" {
+			name := strings.TrimSpace(msg.Content)
+			if !validUsername(name) {
+				metrics.MessagesRejected.WithLabelValues("invalid_username").Inc()
+				c.auditRejectedMessage("invalid_username", msg.Content)
+				slog.Warn("invalid username rejected", "session_id", c.ID)
+				continue
+			}
+			c.setUsername(name)
+			continue
+		}
+
+		if msg.Type != "message" {
+			msg.Type = "message"
+		}
+		body := strings.TrimSpace(msg.Content)
+		if !validMessageBody(body) {
+			metrics.MessagesRejected.WithLabelValues("invalid_body").Inc()
+			c.auditRejectedMessage("invalid_body", msg.Content)
+			slog.Warn("invalid message rejected", "session_id", c.ID)
+			continue
+		}
+		if !c.allowMessage() {
+			metrics.MessagesRejected.WithLabelValues("rate_limited").Inc()
+			c.auditRejectedMessage("rate_limited", body)
+			slog.Warn("message rate limited", "session_id", c.ID)
+			c.sendRateLimitNotice()
+			continue
+		}
+		msg.Content = body
+		msg.Username = c.username()
+
+		dbMsg, err := saveMessageObserved(c.Hub.database, msg.Username, msg.Content, msg.Type)
+		if err != nil {
+			slog.Warn("save message", "err", err)
+		} else {
+			msg.ID = dbMsg.ID
+			msg.Timestamp = dbMsg.Timestamp
+		}
+
+		metrics.MessagesIngested.Inc()
+		c.Hub.broadcast <- msg
+	}
+}
+
+func newMessageLimiter(cfg config.Config) *rate.Limiter {
+	if cfg.DisableMessageRateLimit || cfg.MessageRPS <= 0 {
+		return nil
+	}
+	burst := cfg.MessageBurst
+	if burst < 1 {
+		burst = 1
+	}
+	return rate.NewLimiter(rate.Limit(cfg.MessageRPS), burst)
+}
