@@ -19,7 +19,7 @@ The backend job uploads a **`backend-runtime-proof`** artifact containing:
 - `wsload-smoke.json` — 4-client / 3-message WebSocket fanout smoke result with `-fail-on-loss`.
 - `server-smoke.log` — backend log from the smoke run.
 
-Requirements: Go **1.22**, Node **20**, [golangci-lint](https://golangci-lint.run/) config at **`.golangci.yml`** (repo root), and a lockfile (`frontend/package-lock.json`) in sync with `package.json`.
+Requirements: Go **1.22**, Node **20**, [golangci-lint](https://golangci-lint.run/) **v2** config at **`.golangci.yml`** (repo root), and a lockfile (`frontend/package-lock.json`) in sync with `package.json`.
 
 The production image job waits for `/health`, then checks the React shell at `/`, SPA fallback at `/rooms/general`, empty history from `/api/messages?limit=1`, and Prometheus output from `/metrics`.
 

@@ -1,29 +1,33 @@
+version: "2"
 run:
-  timeout: 4m
   modules-download-mode: readonly
-
 linters:
   enable:
-    - errcheck
-    - govet
-    - ineffassign
     - misspell
     - revive
-    - staticcheck
-    - unused
-
-linters-settings:
-  revive:
-    rules:
-      - name: blank-imports
-      - name: context-as-argument
-      - name: error-return
-      - name: error-strings
-      - name: exported
-      - name: indent-error-flow
-      - name: var-naming
-
+  settings:
+    revive:
+      rules:
+        - name: blank-imports
+        - name: context-as-argument
+        - name: error-return
+        - name: error-strings
+        - name: exported
+        - name: indent-error-flow
+        - name: var-naming
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
 issues:
-  exclude-use-default: false
   max-issues-per-linter: 0
   max-same-issues: 0
+formatters:
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$

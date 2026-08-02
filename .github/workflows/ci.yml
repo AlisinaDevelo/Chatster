@@ -27,7 +27,7 @@ jobs:
           cache-dependency-path: backend/go.sum
       - uses: golangci/golangci-lint-action@v9
         with:
-          version: v1.62.2
+          version: v2.12.2
           working-directory: backend
       - run: go mod download
       - run: go test -race -coverprofile=coverage.out ./...
