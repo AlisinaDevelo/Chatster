@@ -17,7 +17,7 @@ Real-time chat reference stack: **Go** WebSocket hub + **SQLite** history, **Rea
 - Structured JSON logs (`slog`), graceful shutdown, GitHub Actions (lint, test + coverage artifact, WebSocket load smoke, ESLint, build, production image smoke), Dependabot, Docker Compose, single-service production image.
 - **Measured:** zero message loss with **p99 ≈ 6 ms** broadcast delivery at 25 concurrent clients, and zero loss at 50 (Apple M1, Go 1.26); reproducible harness and honest O(N²) fan-out scaling notes in [docs/LOAD_TESTING.md](docs/LOAD_TESTING.md).
 
-**Frontend** is intentionally a focused CRA SPA—see [docs/FRONTEND.md](docs/FRONTEND.md) for accessibility, performance notes, and how this repo positions **backend/platform** depth vs UI framework churn.
+**Frontend** is intentionally a focused Vite + React SPA—see [docs/FRONTEND.md](docs/FRONTEND.md) for accessibility, performance notes, and how this repo positions **backend/platform** depth vs UI framework churn.
 
 ## Quick start
 
@@ -66,8 +66,10 @@ Open **http://localhost:3000**. Use two browser tabs or windows to test live mes
 | `CHATSTER_WS_UPGRADE_BURST` | Backend | Token bucket burst for WS upgrades (default `10`). |
 | `CHATSTER_MESSAGE_RPS` | Backend | Chat messages per client per second (default `5`; `0` disables). |
 | `CHATSTER_MESSAGE_BURST` | Backend | Token bucket burst for per-client message sends (default `10`). |
-| `REACT_APP_WS_URL` | Frontend build | Full WebSocket URL (production / Docker build args). |
-| `REACT_APP_WS_PORT` | Frontend dev | Backend port when using default dev WebSocket URL. |
+| `VITE_WS_URL` | Frontend build | Full WebSocket URL (production / Docker build args). |
+| `VITE_WS_PORT` | Frontend dev | Backend port when using default dev WebSocket URL. |
+| `VITE_API_URL` | Frontend build | HTTP API origin when it is separate from the UI. |
+| `VITE_API_PORT` | Frontend dev | Backend port when using the default API origin. |
 
 See `backend/.env.example` and `frontend/.env.example`.
 
@@ -80,7 +82,7 @@ See `backend/.env.example` and `frontend/.env.example`.
 | `make docker-up` | `docker compose up --build`. |
 | `docker build -t chatster:prod .` | Build the single-service production image; CI also smokes this path. |
 | `cd backend && go test -race ./...` | Go tests (includes HTTP + WebSocket integration tests). |
-| `cd frontend && npm run test:ci` | Jest once. |
+| `cd frontend && npm run test:ci` | Vitest once. |
 | `cd frontend && npm run build` | Optimized static build. |
 
 ## Documentation
@@ -100,7 +102,7 @@ See `backend/.env.example` and `frontend/.env.example`.
 
 ## Stack
 
-Go 1.22 · Gorilla Mux & WebSocket · SQLite (CGO) · Prometheus · React 18 · Sass · Docker · GitHub Actions.
+Go 1.22 · Gorilla Mux & WebSocket · SQLite (CGO) · Prometheus · React 18 · Vite · Vitest · Sass · Docker · GitHub Actions.
 
 ## License
 

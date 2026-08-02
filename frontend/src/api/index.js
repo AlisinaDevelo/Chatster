@@ -1,23 +1,35 @@
+const buildEnv = import.meta.env;
+
+function envValue(primaryName, legacyName) {
+  return buildEnv[primaryName] || buildEnv[legacyName];
+}
+
 function defaultWsUrl() {
-  if (process.env.REACT_APP_WS_URL) {
-    return process.env.REACT_APP_WS_URL;
+  const configuredUrl = envValue('VITE_WS_URL', 'REACT_APP_WS_URL');
+  if (configuredUrl) {
+    return configuredUrl;
   }
-  if (process.env.NODE_ENV === 'development') {
-    const port = process.env.REACT_APP_WS_PORT || '8080';
+
+  if (buildEnv.DEV) {
+    const port = envValue('VITE_WS_PORT', 'REACT_APP_WS_PORT') || '8080';
     return `ws://127.0.0.1:${port}/ws`;
   }
+
   const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   return `${proto}//${window.location.host}/ws`;
 }
 
 function defaultApiUrl() {
-  if (process.env.REACT_APP_API_URL) {
-    return process.env.REACT_APP_API_URL.replace(/\/$/, '');
+  const configuredUrl = envValue('VITE_API_URL', 'REACT_APP_API_URL');
+  if (configuredUrl) {
+    return configuredUrl.replace(/\/$/, '');
   }
-  if (process.env.NODE_ENV === 'development') {
-    const port = process.env.REACT_APP_API_PORT || '8080';
+
+  if (buildEnv.DEV) {
+    const port = envValue('VITE_API_PORT', 'REACT_APP_API_PORT') || '8080';
     return `http://127.0.0.1:${port}`;
   }
+
   return window.location.origin;
 }
 

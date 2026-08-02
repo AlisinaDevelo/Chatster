@@ -1,11 +1,12 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { vi } from 'vitest';
 import ChatInput from './ChatInput';
 
 describe('ChatInput', () => {
   test('submits trimmed message when connected', async () => {
     const user = userEvent.setup();
-    const sendMessage = jest.fn();
+    const sendMessage = vi.fn();
     render(
       <ChatInput sendMessage={sendMessage} hasUsername username="alice" connectionStatus="connected" />
     );
@@ -16,14 +17,14 @@ describe('ChatInput', () => {
 
   test('disables input when disconnected', () => {
     render(
-      <ChatInput sendMessage={jest.fn()} hasUsername username="alice" connectionStatus="disconnected" />
+      <ChatInput sendMessage={vi.fn()} hasUsername username="alice" connectionStatus="disconnected" />
     );
     expect(screen.getByPlaceholderText(/type your message/i)).toBeDisabled();
   });
 
   test('shows explicit username setup before joining', async () => {
     const user = userEvent.setup();
-    const sendMessage = jest.fn();
+    const sendMessage = vi.fn();
     render(
       <ChatInput sendMessage={sendMessage} hasUsername={false} connectionStatus="connected" />
     );

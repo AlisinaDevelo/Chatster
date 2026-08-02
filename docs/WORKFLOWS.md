@@ -64,7 +64,7 @@ Server listens on **`:8080`** by default and writes **`chatster.db`** in the cur
 cd frontend && npm install && npm start
 ```
 
-The dev client targets **`ws://127.0.0.1:8080/ws`** by default. If the backend uses another port, set `REACT_APP_WS_PORT` or `REACT_APP_WS_URL` (see `frontend/.env.example`).
+The dev client targets **`ws://127.0.0.1:8080/ws`** by default. If the backend uses another port, set `VITE_WS_PORT` or `VITE_WS_URL` (see `frontend/.env.example`).
 
 Open [http://localhost:3000](http://localhost:3000) to see the UI.
 

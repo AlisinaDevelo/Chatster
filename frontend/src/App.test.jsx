@@ -1,18 +1,19 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { vi } from 'vitest';
 import App from './App';
 import { connect, disconnect, fetchRecentMessages, sendMsg } from './api';
 
-jest.mock('./api', () => ({
-  connect: jest.fn(),
-  disconnect: jest.fn(),
-  fetchRecentMessages: jest.fn(),
-  sendMsg: jest.fn(),
+vi.mock('./api', () => ({
+  connect: vi.fn(),
+  disconnect: vi.fn(),
+  fetchRecentMessages: vi.fn(),
+  sendMsg: vi.fn(),
 }));
 
 describe('App', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     fetchRecentMessages.mockResolvedValue([]);
     connect.mockImplementation((_onMessage, setStatus) => {
       if (setStatus) setStatus('connected');
