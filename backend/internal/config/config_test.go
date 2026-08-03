@@ -13,6 +13,7 @@ func TestFromEnvDefaults(t *testing.T) {
 	t.Setenv("CHATSTER_STATIC_DIR", "")
 	t.Setenv("CHATSTER_ALLOWED_ORIGINS", "")
 	t.Setenv("CHATSTER_MESSAGE_RETENTION_DAYS", "")
+	t.Setenv("CHATSTER_AUDIT_RETENTION_DAYS", "")
 	t.Setenv("CHATSTER_WS_UPGRADE_RPS", "")
 	t.Setenv("CHATSTER_WS_UPGRADE_BURST", "")
 	cfg := FromEnv()
@@ -39,6 +40,9 @@ func TestFromEnvDefaults(t *testing.T) {
 	}
 	if cfg.MessageRetentionDays != defaultMessageRetentionDays {
 		t.Fatalf("MessageRetentionDays: got %d want %d", cfg.MessageRetentionDays, defaultMessageRetentionDays)
+	}
+	if cfg.AuditRetentionDays != defaultAuditRetentionDays {
+		t.Fatalf("AuditRetentionDays: got %d want %d", cfg.AuditRetentionDays, defaultAuditRetentionDays)
 	}
 }
 
@@ -67,6 +71,7 @@ func TestFromEnvOverride(t *testing.T) {
 	t.Setenv("CHATSTER_STATIC_DIR", "/app/static")
 	t.Setenv("CHATSTER_ALLOWED_ORIGINS", " https://a.test , https://b.test ")
 	t.Setenv("CHATSTER_MESSAGE_RETENTION_DAYS", "30")
+	t.Setenv("CHATSTER_AUDIT_RETENTION_DAYS", "90")
 	t.Setenv("CHATSTER_WS_UPGRADE_RPS", "12")
 	t.Setenv("CHATSTER_WS_UPGRADE_BURST", "3")
 	t.Setenv("CHATSTER_MESSAGE_RPS", "8")
@@ -80,6 +85,9 @@ func TestFromEnvOverride(t *testing.T) {
 	}
 	if cfg.MessageRetentionDays != 30 {
 		t.Fatalf("MessageRetentionDays: got %d want 30", cfg.MessageRetentionDays)
+	}
+	if cfg.AuditRetentionDays != 90 {
+		t.Fatalf("AuditRetentionDays: got %d want 90", cfg.AuditRetentionDays)
 	}
 	if len(cfg.AllowedOrigins) != 2 || cfg.AllowedOrigins[0] != "https://a.test" {
 		t.Fatalf("AllowedOrigins: %+v", cfg.AllowedOrigins)
@@ -99,6 +107,18 @@ func TestFromEnvIgnoresInvalidMessageRetention(t *testing.T) {
 			cfg := FromEnv()
 			if cfg.MessageRetentionDays != defaultMessageRetentionDays {
 				t.Fatalf("MessageRetentionDays: got %d want %d", cfg.MessageRetentionDays, defaultMessageRetentionDays)
+			}
+		})
+	}
+}
+
+func TestFromEnvIgnoresInvalidAuditRetention(t *testing.T) {
+	for _, value := range []string{"0", "-1", "not-a-number"} {
+		t.Run(value, func(t *testing.T) {
+			t.Setenv("CHATSTER_AUDIT_RETENTION_DAYS", value)
+			cfg := FromEnv()
+			if cfg.AuditRetentionDays != defaultAuditRetentionDays {
+				t.Fatalf("AuditRetentionDays: got %d want %d", cfg.AuditRetentionDays, defaultAuditRetentionDays)
 			}
 		})
 	}

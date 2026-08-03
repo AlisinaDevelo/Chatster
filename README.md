@@ -67,6 +67,7 @@ Open **http://localhost:3000**. Use two browser tabs or windows to test live mes
 | `CHATSTER_MESSAGE_RPS` | Backend | Chat messages per client per second (default `5`; `0` disables). |
 | `CHATSTER_MESSAGE_BURST` | Backend | Token bucket burst for per-client message sends (default `10`). |
 | `CHATSTER_MESSAGE_RETENTION_DAYS` | Backend | Delete persisted messages older than this many days at startup (`0` disables). |
+| `CHATSTER_AUDIT_RETENTION_DAYS` | Backend | Delete moderation audit events older than this many days at startup (`0` disables). |
 | `VITE_WS_URL` | Frontend build | Full WebSocket URL (production / Docker build args). |
 | `VITE_WS_PORT` | Frontend dev | Backend port when using default dev WebSocket URL. |
 | `VITE_API_URL` | Frontend build | HTTP API origin when it is separate from the UI. |

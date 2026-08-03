@@ -43,6 +43,12 @@ var (
 		Help:      "Persisted chat messages removed by the configured retention policy.",
 	})
 
+	ModerationEventsPruned = promauto.NewCounter(prometheus.CounterOpts{
+		Namespace: "chatster",
+		Name:      "moderation_audit_events_pruned_total",
+		Help:      "Moderation audit events removed by the configured retention policy.",
+	})
+
 	MessagePersistDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
 		Namespace: "chatster",
 		Name:      "chat_message_persist_duration_seconds",

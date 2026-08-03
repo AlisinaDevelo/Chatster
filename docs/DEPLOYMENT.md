@@ -43,6 +43,7 @@ Then open:
 | `CHATSTER_WS_UPGRADE_RPS` | `5` | Per-IP upgrade abuse control. |
 | `CHATSTER_MESSAGE_RPS` | `5` | Per-client message abuse control. |
 | `CHATSTER_MESSAGE_RETENTION_DAYS` | `30` | Optional startup cleanup for old chat history. |
+| `CHATSTER_AUDIT_RETENTION_DAYS` | `90` | Optional startup cleanup for moderation audit history. |
 
 ## Platform notes
 

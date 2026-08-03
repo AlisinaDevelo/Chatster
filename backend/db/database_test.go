@@ -93,6 +93,13 @@ func TestOpenAppliesSchemaMigrations(t *testing.T) {
 	if name != "index_message_timestamp" {
 		t.Fatalf("migration name: got %q want %q", name, "index_message_timestamp")
 	}
+
+	if err := database.QueryRow("SELECT name FROM schema_migrations WHERE version = 4").Scan(&name); err != nil {
+		t.Fatalf("schema migration row: %v", err)
+	}
+	if name != "index_moderation_audit_timestamp" {
+		t.Fatalf("migration name: got %q want %q", name, "index_moderation_audit_timestamp")
+	}
 }
 
 func TestOpenMigrationsAreIdempotent(t *testing.T) {
@@ -225,6 +232,48 @@ VALUES(?, ?, ?, ?)`, "alice", row.content, "message", row.timestamp); err != nil
 	}
 	if remaining != 1 {
 		t.Fatalf("remaining messages: got %d want 1", remaining)
+	}
+}
+
+func TestPruneModerationEventsBeforeRemovesExpiredEvents(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "audit-retention.db")
+	database, err := Open(path)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	t.Cleanup(func() { _ = database.Close() })
+
+	oldTimestamp := time.Now().UTC().AddDate(0, 0, -120)
+	recentTimestamp := time.Now().UTC().Add(-time.Hour)
+	for _, row := range []struct {
+		reason    string
+		timestamp time.Time
+	}{
+		{reason: "old_rejection", timestamp: oldTimestamp},
+		{reason: "recent_rejection", timestamp: recentTimestamp},
+	} {
+		if _, err := database.Exec(`
+INSERT INTO moderation_audit_log(
+	session_id, username, reason, content_preview, content_length, timestamp
+) VALUES(?, ?, ?, ?, ?, ?)`, "sess_test", "alice", row.reason, "blocked", 7, row.timestamp); err != nil {
+			t.Fatalf("insert %q: %v", row.reason, err)
+		}
+	}
+
+	deleted, err := database.PruneModerationEventsBefore(time.Now().UTC().AddDate(0, 0, -30))
+	if err != nil {
+		t.Fatalf("PruneModerationEventsBefore: %v", err)
+	}
+	if deleted != 1 {
+		t.Fatalf("deleted: got %d want 1", deleted)
+	}
+
+	var remaining int
+	if err := database.QueryRow("SELECT COUNT(*) FROM moderation_audit_log").Scan(&remaining); err != nil {
+		t.Fatalf("count remaining audit events: %v", err)
+	}
+	if remaining != 1 {
+		t.Fatalf("remaining audit events: got %d want 1", remaining)
 	}
 }
 

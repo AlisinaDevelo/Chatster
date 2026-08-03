@@ -15,6 +15,7 @@ Runbook-style notes for operating Chatster beyond local development.
 | `CHATSTER_MESSAGE_RPS` | `5` | Per-client chat messages per second (`0` disables) |
 | `CHATSTER_MESSAGE_BURST` | `10` | Burst size for the message limiter |
 | `CHATSTER_MESSAGE_RETENTION_DAYS` | `0` | Delete persisted messages older than this many days at startup (`0` disables) |
+| `CHATSTER_AUDIT_RETENTION_DAYS` | `0` | Delete moderation audit events older than this many days at startup (`0` disables) |
 
 ## Health checks
 
@@ -79,7 +80,7 @@ docker run --rm \
 
 Startup applies ordered SQLite migrations and records them in `schema_migrations`. Check that ledger before serving real traffic after a schema change.
 
-When `CHATSTER_MESSAGE_RETENTION_DAYS` is positive, startup deletes older rows from `messages`, logs the deleted count, and increments `chatster_chat_messages_pruned_total`. The cleanup is intentionally startup-based so it remains simple and predictable for the single-node SQLite deployment.
+When `CHATSTER_MESSAGE_RETENTION_DAYS` is positive, startup deletes older rows from `messages`, logs the deleted count, and increments `chatster_chat_messages_pruned_total`. When `CHATSTER_AUDIT_RETENTION_DAYS` is positive, the same lifecycle applies to `moderation_audit_log` and `chatster_moderation_audit_events_pruned_total`. The cleanup is intentionally startup-based so it remains simple and predictable for the single-node SQLite deployment.
 
 ## Backups
 

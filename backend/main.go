@@ -37,6 +37,17 @@ func main() {
 		slog.Info("message retention cleanup", "deleted_messages", deleted, "retention_days", cfg.MessageRetentionDays)
 	}
 
+	if cfg.AuditRetentionDays > 0 {
+		cutoff := time.Now().UTC().AddDate(0, 0, -cfg.AuditRetentionDays)
+		deleted, err := database.PruneModerationEventsBefore(cutoff)
+		if err != nil {
+			slog.Error("moderation audit retention cleanup failed", "err", err, "retention_days", cfg.AuditRetentionDays)
+			os.Exit(1)
+		}
+		metrics.ModerationEventsPruned.Add(float64(deleted))
+		slog.Info("moderation audit retention cleanup", "deleted_events", deleted, "retention_days", cfg.AuditRetentionDays)
+	}
+
 	hub := newHub(database)
 	go hub.run()
 

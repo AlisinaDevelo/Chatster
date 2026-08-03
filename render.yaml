@@ -23,5 +23,7 @@ services:
         value: /app/static
       - key: CHATSTER_MESSAGE_RETENTION_DAYS
         value: "30"
+      - key: CHATSTER_AUDIT_RETENTION_DAYS
+        value: "90"
       - key: CHATSTER_ALLOWED_ORIGINS
         sync: false

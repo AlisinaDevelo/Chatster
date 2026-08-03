@@ -56,6 +56,13 @@ CREATE INDEX IF NOT EXISTS idx_moderation_audit_log_timestamp
 CREATE INDEX IF NOT EXISTS idx_messages_timestamp
 	ON messages(julianday(timestamp));`,
 	},
+	{
+		version: 4,
+		name:    "index_moderation_audit_timestamp",
+		sql: `
+CREATE INDEX IF NOT EXISTS idx_moderation_audit_log_julianday_timestamp
+	ON moderation_audit_log(julianday(timestamp));`,
+	},
 }
 
 // Message represents a chat message
@@ -224,6 +231,19 @@ func (db *DB) SaveMessage(username, content, msgType string) (*Message, error) {
 func (db *DB) PruneMessagesBefore(cutoff time.Time) (int64, error) {
 	result, err := db.Exec(
 		"DELETE FROM messages WHERE julianday(timestamp) < julianday(?)",
+		cutoff.UTC().Format(time.RFC3339Nano),
+	)
+	if err != nil {
+		return 0, err
+	}
+
+	return result.RowsAffected()
+}
+
+// PruneModerationEventsBefore deletes audit events older than cutoff and returns the deleted row count.
+func (db *DB) PruneModerationEventsBefore(cutoff time.Time) (int64, error) {
+	result, err := db.Exec(
+		"DELETE FROM moderation_audit_log WHERE julianday(timestamp) < julianday(?)",
 		cutoff.UTC().Format(time.RFC3339Nano),
 	)
 	if err != nil {

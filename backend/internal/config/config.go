@@ -15,6 +15,7 @@ const (
 	defaultMessageRPS           = 5.0
 	defaultMessageBurst         = 10
 	defaultMessageRetentionDays = 0
+	defaultAuditRetentionDays   = 0
 )
 
 // Config holds process configuration loaded from the environment.
@@ -30,6 +31,7 @@ type Config struct {
 	MessageBurst            int
 	DisableMessageRateLimit bool
 	MessageRetentionDays    int
+	AuditRetentionDays      int
 }
 
 // FromEnv reads configuration from environment variables with safe defaults.
@@ -43,6 +45,7 @@ type Config struct {
 // CHATSTER_MESSAGE_RPS — max chat messages per client per second (default 5); "0" disables limiting.
 // CHATSTER_MESSAGE_BURST — token bucket burst for chat messages (default 10).
 // CHATSTER_MESSAGE_RETENTION_DAYS — delete messages older than this many days at startup (default 0 = disabled).
+// CHATSTER_AUDIT_RETENTION_DAYS — delete moderation audit events older than this many days at startup (default 0 = disabled).
 func FromEnv() Config {
 	cfg := Config{
 		HTTPAddr:       strings.TrimSpace(os.Getenv("CHATSTER_HTTP_ADDR")),
@@ -65,6 +68,12 @@ func FromEnv() Config {
 	if v := strings.TrimSpace(os.Getenv("CHATSTER_MESSAGE_RETENTION_DAYS")); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 {
 			cfg.MessageRetentionDays = n
+		}
+	}
+
+	if v := strings.TrimSpace(os.Getenv("CHATSTER_AUDIT_RETENTION_DAYS")); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			cfg.AuditRetentionDays = n
 		}
 	}
 
