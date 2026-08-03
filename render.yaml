@@ -1,0 +1,25 @@
+# yaml-language-server: $schema=https://render.com/schema/render.yaml.json
+
+services:
+  - type: web
+    name: chatster-public-demo
+    runtime: docker
+    plan: starter
+    region: frankfurt
+    branch: main
+    autoDeployTrigger: checksPass
+    dockerfilePath: ./Dockerfile
+    numInstances: 1
+    healthCheckPath: /health
+    maxShutdownDelaySeconds: 30
+    disk:
+      name: chatster-data
+      mountPath: /data
+      sizeGB: 1
+    envVars:
+      - key: CHATSTER_DB_PATH
+        value: /data/chatster.db
+      - key: CHATSTER_STATIC_DIR
+        value: /app/static
+      - key: CHATSTER_ALLOWED_ORIGINS
+        sync: false

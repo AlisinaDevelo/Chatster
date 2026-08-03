@@ -123,7 +123,7 @@ erDiagram
 
 | Variable | Where | Purpose |
 |----------|--------|---------|
-| `CHATSTER_HTTP_ADDR` | Backend | Listen address (default `:8080`). |
+| `CHATSTER_HTTP_ADDR` | Backend | Listen address; if unset, use numeric `PORT` or default to `:8080`. |
 | `CHATSTER_DB_PATH` | Backend | SQLite file path (default `./chatster.db`). |
 | `CHATSTER_ALLOWED_ORIGINS` | Backend | Comma-separated `Origin` allowlist; **empty = allow all** (dev). |
 | `CHATSTER_WS_UPGRADE_RPS` / `CHATSTER_WS_UPGRADE_BURST` | Backend | Per-IP WebSocket upgrade limiter (`RPS=0` disables). |

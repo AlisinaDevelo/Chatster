@@ -8,6 +8,7 @@ import (
 
 func TestFromEnvDefaults(t *testing.T) {
 	t.Setenv("CHATSTER_HTTP_ADDR", "")
+	t.Setenv("PORT", "")
 	t.Setenv("CHATSTER_DB_PATH", "")
 	t.Setenv("CHATSTER_STATIC_DIR", "")
 	t.Setenv("CHATSTER_ALLOWED_ORIGINS", "")
@@ -37,8 +38,27 @@ func TestFromEnvDefaults(t *testing.T) {
 	}
 }
 
+func TestFromEnvUsesPlatformPort(t *testing.T) {
+	t.Setenv("CHATSTER_HTTP_ADDR", "")
+	t.Setenv("PORT", "10000")
+	cfg := FromEnv()
+	if cfg.HTTPAddr != ":10000" {
+		t.Fatalf("HTTPAddr: got %q want :10000", cfg.HTTPAddr)
+	}
+}
+
+func TestFromEnvIgnoresInvalidPlatformPort(t *testing.T) {
+	t.Setenv("CHATSTER_HTTP_ADDR", "")
+	t.Setenv("PORT", "not-a-port")
+	cfg := FromEnv()
+	if cfg.HTTPAddr != defaultHTTPAddr {
+		t.Fatalf("HTTPAddr: got %q want %q", cfg.HTTPAddr, defaultHTTPAddr)
+	}
+}
+
 func TestFromEnvOverride(t *testing.T) {
 	t.Setenv("CHATSTER_HTTP_ADDR", ":9999")
+	t.Setenv("PORT", "10000")
 	t.Setenv("CHATSTER_DB_PATH", "/tmp/x.db")
 	t.Setenv("CHATSTER_STATIC_DIR", "/app/static")
 	t.Setenv("CHATSTER_ALLOWED_ORIGINS", " https://a.test , https://b.test ")

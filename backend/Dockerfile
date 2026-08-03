@@ -16,7 +16,6 @@ WORKDIR /app
 COPY --from=build /out/chatster .
 RUN mkdir -p /data && chown chatster:chatster /data
 USER chatster:chatster
-ENV CHATSTER_HTTP_ADDR=:8080
 ENV CHATSTER_DB_PATH=/data/chatster.db
 EXPOSE 8080
 VOLUME ["/data"]

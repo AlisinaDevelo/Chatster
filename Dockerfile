@@ -24,7 +24,6 @@ COPY --from=backend-build /out/chatster /app/chatster
 COPY --from=frontend-build /src/frontend/build /app/static
 RUN mkdir -p /data && chown -R chatster:chatster /data /app/static
 USER chatster:chatster
-ENV CHATSTER_HTTP_ADDR=:8080
 ENV CHATSTER_DB_PATH=/data/chatster.db
 ENV CHATSTER_STATIC_DIR=/app/static
 EXPOSE 8080

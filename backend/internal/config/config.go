@@ -32,7 +32,7 @@ type Config struct {
 
 // FromEnv reads configuration from environment variables with safe defaults.
 //
-// CHATSTER_HTTP_ADDR — listen address (default ":8080").
+// CHATSTER_HTTP_ADDR — listen address; if unset, use numeric PORT when available, otherwise ":8080".
 // CHATSTER_DB_PATH — SQLite file path (default "./chatster.db").
 // CHATSTER_STATIC_DIR — optional directory of built frontend assets to serve from the backend.
 // CHATSTER_ALLOWED_ORIGINS — comma-separated WebSocket Origin allowlist; empty = allow all (dev-friendly).
@@ -53,7 +53,7 @@ func FromEnv() Config {
 	}
 
 	if cfg.HTTPAddr == "" {
-		cfg.HTTPAddr = defaultHTTPAddr
+		cfg.HTTPAddr = platformHTTPAddr()
 	}
 	if cfg.DBPath == "" {
 		cfg.DBPath = defaultDBPath
@@ -102,6 +102,20 @@ func FromEnv() Config {
 	}
 
 	return cfg
+}
+
+// platformHTTPAddr adapts the numeric PORT convention used by hosted web services.
+func platformHTTPAddr() string {
+	port := strings.TrimSpace(os.Getenv("PORT"))
+	if port == "" {
+		return defaultHTTPAddr
+	}
+
+	portNumber, err := strconv.Atoi(port)
+	if err != nil || portNumber < 1 || portNumber > 65535 {
+		return defaultHTTPAddr
+	}
+	return ":" + strconv.Itoa(portNumber)
 }
 
 // OriginAllowed returns true if the request may open a WebSocket from a browser Origin.

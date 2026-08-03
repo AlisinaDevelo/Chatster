@@ -58,7 +58,7 @@ Open **http://localhost:3000**. Use two browser tabs or windows to test live mes
 
 | Variable | Scope | Purpose |
 |----------|--------|---------|
-| `CHATSTER_HTTP_ADDR` | Backend | Listen address (default `:8080`). |
+| `CHATSTER_HTTP_ADDR` | Backend | Listen address; if unset, use numeric `PORT` or default to `:8080`. |
 | `CHATSTER_DB_PATH` | Backend | SQLite file (default `./chatster.db`). |
 | `CHATSTER_STATIC_DIR` | Backend | Optional built frontend directory served by the Go backend. |
 | `CHATSTER_ALLOWED_ORIGINS` | Backend | Comma-separated `Origin` values for WebSocket; **empty = allow all** (dev only). |

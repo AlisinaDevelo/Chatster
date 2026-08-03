@@ -6,7 +6,7 @@ Runbook-style notes for operating Chatster beyond local development.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `CHATSTER_HTTP_ADDR` | `:8080` | HTTP listen address |
+| `CHATSTER_HTTP_ADDR` | `PORT` or `:8080` | HTTP listen address; numeric `PORT` is used when this is unset |
 | `CHATSTER_DB_PATH` | `./chatster.db` | SQLite database file path |
 | `CHATSTER_STATIC_DIR` | _(empty)_ | Optional built frontend directory served by the Go backend |
 | `CHATSTER_ALLOWED_ORIGINS` | _(empty)_ | Comma-separated WebSocket `Origin` values; empty allows all origins |

@@ -101,6 +101,8 @@ jobs:
     needs: [backend, frontend]
     steps:
       - uses: actions/checkout@v7
+      - name: Validate Render Blueprint YAML
+        run: ruby -e 'require "yaml"; YAML.load_file("render.yaml")'
       - name: Build production image
         run: docker build -t chatster:ci .
       - name: Smoke production image
