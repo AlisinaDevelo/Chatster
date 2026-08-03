@@ -42,6 +42,7 @@ Then open:
 | `CHATSTER_ALLOWED_ORIGINS` | `https://chatster.example.com` | Restrict browser WebSocket origins. |
 | `CHATSTER_WS_UPGRADE_RPS` | `5` | Per-IP upgrade abuse control. |
 | `CHATSTER_MESSAGE_RPS` | `5` | Per-client message abuse control. |
+| `CHATSTER_MESSAGE_RETENTION_DAYS` | `30` | Optional startup cleanup for old chat history. |
 
 ## Platform notes
 

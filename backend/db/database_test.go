@@ -3,6 +3,7 @@ package db
 import (
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestNewAndSaveMessage(t *testing.T) {
@@ -84,6 +85,13 @@ func TestOpenAppliesSchemaMigrations(t *testing.T) {
 	}
 	if name != "create_moderation_audit_log" {
 		t.Fatalf("migration name: got %q want %q", name, "create_moderation_audit_log")
+	}
+
+	if err := database.QueryRow("SELECT name FROM schema_migrations WHERE version = 3").Scan(&name); err != nil {
+		t.Fatalf("schema migration row: %v", err)
+	}
+	if name != "index_message_timestamp" {
+		t.Fatalf("migration name: got %q want %q", name, "index_message_timestamp")
 	}
 }
 
@@ -176,6 +184,47 @@ func TestGetRecentMessagesOrder(t *testing.T) {
 	}
 	if got := []string{msgs[0].Content, msgs[1].Content, msgs[2].Content}; got[0] != "first" || got[1] != "second" || got[2] != "third" {
 		t.Fatalf("chronological order: %+v", got)
+	}
+}
+
+func TestPruneMessagesBeforeRemovesExpiredMessages(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "retention.db")
+	database, err := Open(path)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	t.Cleanup(func() { _ = database.Close() })
+
+	oldTimestamp := time.Now().UTC().AddDate(0, 0, -3)
+	recentTimestamp := time.Now().UTC().Add(-time.Hour)
+	for _, row := range []struct {
+		content   string
+		timestamp time.Time
+	}{
+		{content: "expired", timestamp: oldTimestamp},
+		{content: "recent", timestamp: recentTimestamp},
+	} {
+		if _, err := database.Exec(`
+INSERT INTO messages(username, content, type, timestamp)
+VALUES(?, ?, ?, ?)`, "alice", row.content, "message", row.timestamp); err != nil {
+			t.Fatalf("insert %q: %v", row.content, err)
+		}
+	}
+
+	deleted, err := database.PruneMessagesBefore(time.Now().UTC().AddDate(0, 0, -1))
+	if err != nil {
+		t.Fatalf("PruneMessagesBefore: %v", err)
+	}
+	if deleted != 1 {
+		t.Fatalf("deleted: got %d want 1", deleted)
+	}
+
+	var remaining int
+	if err := database.QueryRow("SELECT COUNT(*) FROM messages").Scan(&remaining); err != nil {
+		t.Fatalf("count remaining messages: %v", err)
+	}
+	if remaining != 1 {
+		t.Fatalf("remaining messages: got %d want 1", remaining)
 	}
 }
 

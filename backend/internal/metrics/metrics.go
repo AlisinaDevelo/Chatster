@@ -37,6 +37,12 @@ var (
 		Help:      "Chat messages rejected by reason (invalid_username, invalid_body, rate_limited).",
 	}, []string{"reason"})
 
+	MessagesPruned = promauto.NewCounter(prometheus.CounterOpts{
+		Namespace: "chatster",
+		Name:      "chat_messages_pruned_total",
+		Help:      "Persisted chat messages removed by the configured retention policy.",
+	})
+
 	MessagePersistDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
 		Namespace: "chatster",
 		Name:      "chat_message_persist_duration_seconds",

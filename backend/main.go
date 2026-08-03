@@ -11,6 +11,7 @@ import (
 
 	"github.com/AliSinaDevelo/Chatster/db"
 	"github.com/AliSinaDevelo/Chatster/internal/config"
+	"github.com/AliSinaDevelo/Chatster/internal/metrics"
 )
 
 func main() {
@@ -24,6 +25,17 @@ func main() {
 		os.Exit(1)
 	}
 	defer func() { _ = database.Close() }()
+
+	if cfg.MessageRetentionDays > 0 {
+		cutoff := time.Now().UTC().AddDate(0, 0, -cfg.MessageRetentionDays)
+		deleted, err := database.PruneMessagesBefore(cutoff)
+		if err != nil {
+			slog.Error("message retention cleanup failed", "err", err, "retention_days", cfg.MessageRetentionDays)
+			os.Exit(1)
+		}
+		metrics.MessagesPruned.Add(float64(deleted))
+		slog.Info("message retention cleanup", "deleted_messages", deleted, "retention_days", cfg.MessageRetentionDays)
+	}
 
 	hub := newHub(database)
 	go hub.run()

@@ -128,6 +128,7 @@ erDiagram
 | `CHATSTER_ALLOWED_ORIGINS` | Backend | Comma-separated `Origin` allowlist; **empty = allow all** (dev). |
 | `CHATSTER_WS_UPGRADE_RPS` / `CHATSTER_WS_UPGRADE_BURST` | Backend | Per-IP WebSocket upgrade limiter (`RPS=0` disables). |
 | `CHATSTER_MESSAGE_RPS` / `CHATSTER_MESSAGE_BURST` | Backend | Per-client chat message limiter (`RPS=0` disables). |
+| `CHATSTER_MESSAGE_RETENTION_DAYS` | Backend | Startup cleanup for messages older than the configured age (`0` disables). |
 | `VITE_WS_URL` | Frontend build | Full WebSocket URL override (production). |
 | `VITE_WS_PORT` | Frontend dev | Backend port when using default dev URL. |
 | `VITE_API_URL` | Frontend build | HTTP API origin when it is separate from the UI. |

@@ -12,6 +12,7 @@ func TestFromEnvDefaults(t *testing.T) {
 	t.Setenv("CHATSTER_DB_PATH", "")
 	t.Setenv("CHATSTER_STATIC_DIR", "")
 	t.Setenv("CHATSTER_ALLOWED_ORIGINS", "")
+	t.Setenv("CHATSTER_MESSAGE_RETENTION_DAYS", "")
 	t.Setenv("CHATSTER_WS_UPGRADE_RPS", "")
 	t.Setenv("CHATSTER_WS_UPGRADE_BURST", "")
 	cfg := FromEnv()
@@ -35,6 +36,9 @@ func TestFromEnvDefaults(t *testing.T) {
 	}
 	if cfg.MessageRPS != defaultMessageRPS {
 		t.Fatalf("MessageRPS: got %v want %v", cfg.MessageRPS, defaultMessageRPS)
+	}
+	if cfg.MessageRetentionDays != defaultMessageRetentionDays {
+		t.Fatalf("MessageRetentionDays: got %d want %d", cfg.MessageRetentionDays, defaultMessageRetentionDays)
 	}
 }
 
@@ -62,6 +66,7 @@ func TestFromEnvOverride(t *testing.T) {
 	t.Setenv("CHATSTER_DB_PATH", "/tmp/x.db")
 	t.Setenv("CHATSTER_STATIC_DIR", "/app/static")
 	t.Setenv("CHATSTER_ALLOWED_ORIGINS", " https://a.test , https://b.test ")
+	t.Setenv("CHATSTER_MESSAGE_RETENTION_DAYS", "30")
 	t.Setenv("CHATSTER_WS_UPGRADE_RPS", "12")
 	t.Setenv("CHATSTER_WS_UPGRADE_BURST", "3")
 	t.Setenv("CHATSTER_MESSAGE_RPS", "8")
@@ -73,6 +78,9 @@ func TestFromEnvOverride(t *testing.T) {
 	if cfg.StaticDir != "/app/static" {
 		t.Fatalf("StaticDir: got %q want /app/static", cfg.StaticDir)
 	}
+	if cfg.MessageRetentionDays != 30 {
+		t.Fatalf("MessageRetentionDays: got %d want 30", cfg.MessageRetentionDays)
+	}
 	if len(cfg.AllowedOrigins) != 2 || cfg.AllowedOrigins[0] != "https://a.test" {
 		t.Fatalf("AllowedOrigins: %+v", cfg.AllowedOrigins)
 	}
@@ -81,6 +89,18 @@ func TestFromEnvOverride(t *testing.T) {
 	}
 	if cfg.MessageRPS != 8 || cfg.MessageBurst != 4 {
 		t.Fatalf("message rate: rps=%v burst=%v", cfg.MessageRPS, cfg.MessageBurst)
+	}
+}
+
+func TestFromEnvIgnoresInvalidMessageRetention(t *testing.T) {
+	for _, value := range []string{"0", "-1", "not-a-number"} {
+		t.Run(value, func(t *testing.T) {
+			t.Setenv("CHATSTER_MESSAGE_RETENTION_DAYS", value)
+			cfg := FromEnv()
+			if cfg.MessageRetentionDays != defaultMessageRetentionDays {
+				t.Fatalf("MessageRetentionDays: got %d want %d", cfg.MessageRetentionDays, defaultMessageRetentionDays)
+			}
+		})
 	}
 }
 

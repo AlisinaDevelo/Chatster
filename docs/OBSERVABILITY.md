@@ -21,6 +21,7 @@ Namespaces and names follow `chatster_*` where applicable. Inspect `/metrics` on
 | `chatster_websocket_outbound_drops_total{reason}` | Counter | Outbound drops by reason: `slow_client`, `write_error`. |
 | `chatster_chat_messages_ingested_total` | Counter | Valid chat messages accepted for persistence and broadcast. |
 | `chatster_chat_messages_rejected_total{reason}` | Counter | Rejected chat inputs by reason: `invalid_username`, `invalid_body`, `rate_limited`. |
+| `chatster_chat_messages_pruned_total` | Counter | Persisted chat messages removed by the startup retention policy. |
 | `chatster_chat_message_persist_duration_seconds{result}` | Histogram | SQLite persistence latency for accepted chat/system messages by `ok` / `error`. |
 | `chatster_websocket_broadcast_fanout_duration_seconds` | Histogram | Hub fanout enqueue latency for each broadcast message. |
 
