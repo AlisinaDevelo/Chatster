@@ -18,8 +18,9 @@ Implemented practices include:
 - **Live region:** message list uses `role="log"` and `aria-live="polite"` so assistive tech is notified of new messages (tunable if volume becomes noisy).
 - **Forms:** visible labels (or visually hidden where design uses placeholders), `aria-describedby` for hints, submit disabled when disconnected.
 - **Motion:** global `prefers-reduced-motion` respected in styles (see `index.css` / component SCSS).
+- **Automated checks:** the rendered app runs an axe-core accessibility smoke test in `App.test.jsx`, which executes in the normal Vitest/CI path.
 
-**Gaps / next steps:** full keyboard path for custom scroll containers; optional “reduce live announcements” setting for high-traffic rooms; automated **axe** checks in CI.
+**Gaps / next steps:** full keyboard path for custom scroll containers; optional “reduce live announcements” setting for high-traffic rooms.
 
 ## Performance budget (guidance)
 

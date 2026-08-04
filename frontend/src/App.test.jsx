@@ -1,6 +1,7 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi } from 'vitest';
+import axe from 'axe-core';
 import App from './App';
 import { connect, disconnect, fetchRecentMessages, sendMsg } from './api';
 
@@ -67,5 +68,39 @@ describe('App', () => {
     });
     expect(screen.getAllByText(/joined as/i).length).toBeGreaterThan(0);
     expect(screen.getByText('alice')).toBeInTheDocument();
+  });
+
+  test('has no automated accessibility violations', async () => {
+    render(<App />);
+
+    const canvasContext = {
+      canvas: document.createElement('canvas'),
+      clearRect: vi.fn(),
+      fillText: vi.fn(),
+      font: '',
+      getImageData: (_x, _y, width, height) => ({
+        data: new Uint8ClampedArray(Math.ceil(width) * Math.ceil(height) * 4),
+      }),
+      measureText: (text) => ({ width: text.length * 8 }),
+      textAlign: 'left',
+      textBaseline: 'top',
+    };
+    const getContext = vi
+      .spyOn(HTMLCanvasElement.prototype, 'getContext')
+      .mockReturnValue(canvasContext);
+    const originalGetComputedStyle = window.getComputedStyle;
+    const getComputedStyle = vi
+      .spyOn(window, 'getComputedStyle')
+      .mockImplementation((element) => originalGetComputedStyle.call(window, element));
+
+    let results;
+    try {
+      results = await axe.run(document.body);
+    } finally {
+      getContext.mockRestore();
+      getComputedStyle.mockRestore();
+    }
+
+    expect(results.violations).toEqual([]);
   });
 });
