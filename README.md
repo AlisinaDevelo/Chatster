@@ -2,7 +2,7 @@
 
 Real-time chat reference stack: **Go** WebSocket hub + **SQLite** history, **React** client, single-service **Docker** production image, **CI** with lint and coverage, **Prometheus** metrics, and **portfolio-grade** docs (scaling, threat model, ADRs).
 
-[![CI](https://github.com/AliSinaDevelo/Chatster/actions/workflows/ci.yml/badge.svg)](https://github.com/AliSinaDevelo/Chatster/actions/workflows/ci.yml)
+[![CI](https://github.com/AlisinaDevelo/Chatster/actions/workflows/ci.yml/badge.svg)](https://github.com/AlisinaDevelo/Chatster/actions/workflows/ci.yml)
 
 ## Preview
 
@@ -18,6 +18,32 @@ Real-time chat reference stack: **Go** WebSocket hub + **SQLite** history, **Rea
 - **Measured:** zero message loss with **p99 ≈ 6 ms** broadcast delivery at 25 concurrent clients, and zero loss at 50 (Apple M1, Go 1.26); reproducible harness and honest O(N²) fan-out scaling notes in [docs/LOAD_TESTING.md](docs/LOAD_TESTING.md).
 
 **Frontend** is intentionally a focused Vite + React SPA—see [docs/FRONTEND.md](docs/FRONTEND.md) for accessibility, performance notes, and how this repo positions **backend/platform** depth vs UI framework churn.
+
+## Architecture at a glance
+
+```mermaid
+flowchart LR
+  Browser[React + Vite SPA] -->|WebSocket /ws| Server[Go HTTP and WebSocket server]
+  Browser -->|GET /api/messages| Server
+  Server --> Hub[Hub and bounded client queues]
+  Server --> History[History API]
+  Hub --> SQLite[(SQLite)]
+  History --> SQLite
+  Server --> Health["/health + /metrics"]
+```
+
+The server validates and rate-limits WebSocket input, persists accepted messages, and enqueues fan-out to each client. The same process serves the built SPA, reconnect history, health checks, and Prometheus metrics. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the message flow, lifecycle states, and scaling boundaries.
+
+## Measured results
+
+The load harness measures real delivered fan-out frames, not client-side enqueue speed. Results below use a fresh SQLite database, disabled demo limiters, and an Apple M1 with Go 1.26.3 on macOS 26.5.1 (2026-06-24).
+
+| Concurrent clients | Delivered | Lost | Throughput | p99 delivery latency |
+|-------------------:|----------:|-----:|-----------:|---------------------:|
+| 25 | 12,500 / 12,500 | 0 | ~121,000/s | 5.7 ms |
+| 50 | 50,000 / 50,000 | 0 | ~314,000/s | 57 ms |
+
+The broadcast path is intentionally single-node and O(clients²). The harness, exact commands, and why no unstable 100-client claim is published are documented in [docs/LOAD_TESTING.md](docs/LOAD_TESTING.md).
 
 ## Quick start
 
@@ -53,6 +79,19 @@ cd frontend && npm install && npm start
 ```
 
 Open **http://localhost:3000**. Use two browser tabs or windows to test live messaging.
+
+### Two-tab smoke
+
+1. Open the UI in two tabs.
+2. Join each tab with a different display name.
+3. Send a message from either tab and confirm both histories update.
+4. Refresh one tab and confirm recent history catches up after reconnect.
+
+The production path serves the UI and API from one origin; CI builds and smoke-tests that container on every push.
+
+## Deployment status
+
+The root Docker image and checked-in [`render.yaml`](render.yaml) are ready for a single-instance Render deployment with a persistent SQLite disk. A public URL is intentionally not listed until the repository is connected to a Render account and the deployed origin is configured in `CHATSTER_ALLOWED_ORIGINS`; see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
 ## Configuration
 
