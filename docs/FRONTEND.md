@@ -16,11 +16,13 @@ Implemented practices include:
 
 - **Landmarks:** `header` / `main` / `footer`, labeled chat **region** (`aria-labelledby`).
 - **Live region:** message list uses `role="log"` and `aria-live="polite"` so assistive tech is notified of new messages (tunable if volume becomes noisy).
+- **Keyboard scrolling:** the scrollable message log is tabbable and exposes a visible focus ring, so keyboard users can enter and scroll the history directly.
+- **Announcement preference:** the **Quiet updates** checkbox persists locally and switches the message log to `aria-live="off"` for high-traffic rooms.
 - **Forms:** visible labels (or visually hidden where design uses placeholders), `aria-describedby` for hints, submit disabled when disconnected.
 - **Motion:** global `prefers-reduced-motion` respected in styles (see `index.css` / component SCSS).
 - **Automated checks:** the rendered app runs an axe-core accessibility smoke test in `App.test.jsx`, which executes in the normal Vitest/CI path.
 
-**Gaps / next steps:** full keyboard path for custom scroll containers; optional “reduce live announcements” setting for high-traffic rooms.
+**Next steps:** validate the interaction across a browser/device matrix and consider list virtualization for very long sessions.
 
 ## Performance budget (guidance)
 

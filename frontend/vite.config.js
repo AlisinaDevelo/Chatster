@@ -29,6 +29,11 @@ export default defineConfig(({ mode }) => {
       clearMocks: true,
       css: true,
       environment: 'jsdom',
+      environmentOptions: {
+        jsdom: {
+          url: 'http://localhost',
+        },
+      },
       globals: true,
       setupFiles: './src/setupTests.js',
     },
