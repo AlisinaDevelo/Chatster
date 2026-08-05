@@ -1,7 +1,7 @@
 ---
 id: 0004
 title: Gracefully drain WebSocket clients on shutdown
-status: review
+status: done
 agent: backend-specialist
 model: sonnet
 depends_on: []
@@ -23,6 +23,11 @@ Current code has graceful HTTP shutdown, heartbeat, bounded outbound queues, and
 
 ## Notes
 Reference: https://pkg.go.dev/net/http#Server.Shutdown. WebSocket connections are long-lived and need an explicit application-level lifecycle around HTTP shutdown.
+
+## Verification
+- `go test -race ./...` and focused shutdown/WebSocket race tests (five repetitions) pass.
+- `go vet ./...` and `golangci-lint` v2.12.2 report no issues; frontend tests/build and CI YAML validation pass.
+- GitHub Actions run 30973338168 passed backend, frontend, and production-image jobs.
 
 ## Verification
 - `go test -race ./...` passes, including real WebSocket close-code/rejection coverage and the forced-deadline branch.
