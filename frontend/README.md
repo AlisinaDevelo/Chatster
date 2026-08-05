@@ -6,6 +6,8 @@ Vite + React shell for the Chatster WebSocket client.
 - Room routes use `/rooms/<name>`; the current selector offers `general`, `engineering`, and `off-topic`, with `general` as the fallback.
 - **Docker** — production-style image with nginx: `docker compose up --build` from the repo root (see root [README.md](../README.md)).
 - **`npm run test`** / **`npm run test:ci`** — Vitest.
+- **`npm run test:e2e`** — Playwright smoke across Chromium, Firefox, and WebKit (run `npx playwright install` once first).
+- **`npm run test:e2e:ci`** — Chromium-only Playwright smoke, matching CI.
 - **`npm run build`** — static assets for deployment.
 - **`npm run preview`** — serve the production build locally.
 

@@ -9,7 +9,7 @@ GitHub Actions workflow **`.github/workflows/ci.yml`** runs on every push and pu
 | Job | What it does |
 |-----|----------------|
 | **backend** | `golangci-lint`, `go test -race` with **coverage**, `go vet`, tiny WebSocket load smoke |
-| **frontend** | `npm ci`, `npm run lint`, `npm run test:ci`, `npm run build` |
+| **frontend** | `npm ci`, `npm run lint`, `npm run test:ci`, `npm run build`, Chromium Playwright smoke |
 | **production-image** | Builds the root Docker production image and smokes the running single-container app |
 
 The backend job uploads a **`backend-runtime-proof`** artifact containing:
@@ -18,6 +18,11 @@ The backend job uploads a **`backend-runtime-proof`** artifact containing:
 - `coverage-summary.txt` — human-readable `go tool cover -func` summary.
 - `wsload-smoke.json` — 4-client / 3-message WebSocket fanout smoke result with `-fail-on-loss`.
 - `server-smoke.log` — backend log from the smoke run.
+
+The frontend job uploads **`frontend-playwright-proof`** with the Playwright HTML report
+and failure diagnostics. The CI smoke starts a real Go backend and Vite frontend, then
+runs the Chromium project against username onboarding, same-room delivery, room
+switching/isolation, and reload history catch-up.
 
 Requirements: Go **1.22**, Node **20**, [golangci-lint](https://golangci-lint.run/) **v2** config at **`.golangci.yml`** (repo root), and a lockfile (`frontend/package-lock.json`) in sync with `package.json`.
 
@@ -47,6 +52,21 @@ make lint-backend   # golangci-lint run ./...
 make lint-frontend  # npm run lint
 make build-frontend # production build
 ```
+
+For browser workflow coverage, install the local browser binaries once and run the full
+desktop-engine matrix:
+
+```bash
+cd frontend
+npx playwright install
+npm run test:e2e
+```
+
+`npm run test:e2e:ci` is the fast Chromium-only equivalent used by every CI push. The
+browser config starts isolated temporary SQLite state for the backend and preserves the
+development ports `3000` and `8080`; set no extra environment variables for the normal
+path. If those ports already have healthy local servers, Playwright reuses them outside
+CI.
 
 ## Local development (native)
 

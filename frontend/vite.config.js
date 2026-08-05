@@ -29,6 +29,7 @@ export default defineConfig(({ mode }) => {
       clearMocks: true,
       css: true,
       environment: 'jsdom',
+      exclude: ['**/node_modules/**', '**/dist/**', '**/e2e/**'],
       environmentOptions: {
         jsdom: {
           url: 'http://localhost',

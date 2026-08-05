@@ -21,7 +21,7 @@ Implemented practices include:
 - **Room navigation:** the header exposes a labeled native select for the active room, with URL state and reconnect/history behavior kept in sync.
 - **Forms:** visible labels (or visually hidden where design uses placeholders), `aria-describedby` for hints, submit disabled when disconnected.
 - **Motion:** global `prefers-reduced-motion` respected in styles (see `index.css` / component SCSS).
-- **Automated checks:** the rendered app runs an axe-core accessibility smoke test in `App.test.jsx`, which executes in the normal Vitest/CI path.
+- **Automated checks:** the rendered app runs an axe-core accessibility smoke test in `App.test.jsx`, which executes in the normal Vitest/CI path. Playwright separately covers the real-browser chat workflow; it does not replace the accessibility check.
 
 **Next steps:** validate the interaction across a browser/device matrix and consider list virtualization for very long sessions.
 
@@ -36,7 +36,7 @@ Implemented practices include:
 ## Testing
 
 - **Vitest + Testing Library** for components, room routing, room-aware history requests, and mocked WebSocket `api` module.
-- **E2E** (Playwright/Cypress) is a documented extension in [WORKFLOWS.md](WORKFLOWS.md)—not required for unit coverage.
+- **Browser workflow smoke:** `npm run test:e2e` runs Chromium, Firefox, and WebKit locally after `npx playwright install`. CI runs the Chromium project on every push and stores the HTML report plus failure trace/screenshot/video artifacts. The matrix currently covers desktop engines only; mobile browsers, real assistive technology, and device farms remain outside this smoke path.
 
 ## Security (client)
 
