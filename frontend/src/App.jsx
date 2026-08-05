@@ -5,6 +5,7 @@ import { connect, disconnect, fetchRecentMessages, sendMsg } from './api';
 import Header from './components/Header/Header';
 import ChatHistory from './components/ChatHistory/ChatHistory';
 import ChatInput from './components/ChatInput/ChatInput';
+import { DEFAULT_ROOM, ROOM_OPTIONS, roomFromPath, roomPath } from './rooms';
 
 function appendUniqueMessages(existing, incoming) {
   const seenIds = new Set(existing.filter((msg) => msg.id != null).map((msg) => msg.id));
@@ -27,6 +28,7 @@ function App() {
   const [chatHistory, setChatHistory] = useState([]);
   const [username, setUsername] = useState('');
   const [connectionStatus, setConnectionStatus] = useState('connecting');
+  const [activeRoom, setActiveRoom] = useState(() => roomFromPath());
 
   const hasUsername = username !== '';
 
@@ -38,9 +40,9 @@ function App() {
       } catch (e) {
         console.error('Error parsing message:', e);
       }
-    }, setConnectionStatus);
+    }, setConnectionStatus, activeRoom);
     return () => disconnect();
-  }, []);
+  }, [activeRoom]);
 
   useEffect(() => {
     if (connectionStatus !== 'connected') {
@@ -48,7 +50,7 @@ function App() {
     }
 
     let cancelled = false;
-    fetchRecentMessages(50)
+    fetchRecentMessages(50, activeRoom)
       .then((messages) => {
         if (!cancelled) {
           setChatHistory((prevChatHistory) => appendUniqueMessages(prevChatHistory, messages));
@@ -61,7 +63,21 @@ function App() {
     return () => {
       cancelled = true;
     };
-  }, [connectionStatus]);
+  }, [activeRoom, connectionStatus]);
+
+  useEffect(() => {
+    const handlePopState = () => {
+      const nextRoom = roomFromPath();
+      if (nextRoom === activeRoom) {
+        return;
+      }
+      setChatHistory([]);
+      setActiveRoom(nextRoom);
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [activeRoom]);
 
   useEffect(() => {
     if (connectionStatus === 'connected' && hasUsername) {
@@ -92,12 +108,27 @@ function App() {
     }
   };
 
+  const changeRoom = (room) => {
+    if (!ROOM_OPTIONS.includes(room) || room === activeRoom) {
+      return;
+    }
+
+    window.history.pushState({}, '', roomPath(room));
+    setChatHistory([]);
+    setActiveRoom(room);
+  };
+
   return (
     <div className="App">
       <a href="#main-content" className="skip-link">
         Skip to chat
       </a>
-      <Header connectionStatus={connectionStatus} />
+      <Header
+        connectionStatus={connectionStatus}
+        onRoomChange={changeRoom}
+        room={activeRoom || DEFAULT_ROOM}
+        roomOptions={ROOM_OPTIONS}
+      />
 
       <main id="main-content" className="chat-main" tabIndex={-1}>
         <div className="chat-container">

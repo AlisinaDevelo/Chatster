@@ -15,6 +15,7 @@ vi.mock('./api', () => ({
 describe('App', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    window.history.replaceState({}, '', '/');
     fetchRecentMessages.mockResolvedValue([]);
     connect.mockImplementation((_onMessage, setStatus) => {
       if (setStatus) setStatus('connected');
@@ -44,7 +45,7 @@ describe('App', () => {
     render(<App />);
 
     await waitFor(() => {
-      expect(fetchRecentMessages).toHaveBeenCalledWith(50);
+      expect(fetchRecentMessages).toHaveBeenCalledWith(50, 'general');
     });
     expect(await screen.findByText('already here')).toBeInTheDocument();
   });
@@ -68,6 +69,26 @@ describe('App', () => {
     });
     expect(screen.getAllByText(/joined as/i).length).toBeGreaterThan(0);
     expect(screen.getByText('alice')).toBeInTheDocument();
+  });
+
+  test('switches rooms and reconnects with room-scoped history', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('combobox', { name: /chat room/i })).toHaveValue('general');
+    });
+
+    await user.selectOptions(
+      screen.getByRole('combobox', { name: /chat room/i }),
+      'engineering'
+    );
+
+    await waitFor(() => {
+      expect(connect).toHaveBeenLastCalledWith(expect.any(Function), expect.any(Function), 'engineering');
+      expect(fetchRecentMessages).toHaveBeenLastCalledWith(50, 'engineering');
+    });
+    expect(window.location.pathname).toBe('/rooms/engineering');
   });
 
   test('has no automated accessibility violations', async () => {
