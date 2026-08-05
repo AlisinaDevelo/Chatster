@@ -1,7 +1,7 @@
 ---
 id: 0003
 title: Add Playwright browser-matrix smoke coverage
-status: review
+status: done
 agent: test-engineer
 model: sonnet
 depends_on: []
@@ -23,3 +23,8 @@ The React tests cover components and mocked API calls, while the repo previously
 
 ## Notes
 Research anchor: https://playwright.dev/docs/intro. Playwright Test supports browser projects, isolation, parallel execution, and trace/report tooling.
+
+## Verification
+- Local `npm run test:e2e` passed across Chromium, Firefox, and WebKit (6 tests).
+- Local `make test` and `make lint` passed with the CI-pinned `golangci-lint` v2.12.2.
+- GitHub Actions run 30972316858 passed backend, frontend, and production-image jobs.
