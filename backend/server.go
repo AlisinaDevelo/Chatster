@@ -49,6 +49,12 @@ func newSessionID() string {
 }
 
 func serveWs(hub *Hub, cfg config.Config, up websocket.Upgrader, wsRL *ratelimit.WSUpgrade, w http.ResponseWriter, r *http.Request) {
+	room, err := db.NormalizeRoom(r.URL.Query().Get("room"))
+	if err != nil {
+		http.Error(w, "invalid room", http.StatusBadRequest)
+		return
+	}
+
 	ip := clientIP(r)
 	if wsRL != nil && !wsRL.Allow(ip) {
 		metrics.WSUpgrades.WithLabelValues("rate_limited").Inc()
@@ -74,6 +80,7 @@ func serveWs(hub *Hub, cfg config.Config, up websocket.Upgrader, wsRL *ratelimit
 		ID:         newSessionID(),
 		Conn:       conn,
 		Username:   "Anonymous",
+		Room:       room,
 		Hub:        hub,
 		msgLimiter: newMessageLimiter(cfg),
 		send:       make(chan Message, outboundQueueSize),
@@ -120,6 +127,12 @@ func messagesHandler(database *db.DB) http.HandlerFunc {
 			return
 		}
 
+		room, err := db.NormalizeRoom(r.URL.Query().Get("room"))
+		if err != nil {
+			http.Error(w, "invalid room", http.StatusBadRequest)
+			return
+		}
+
 		limit := 50
 		if raw := r.URL.Query().Get("limit"); raw != "" {
 			parsed, err := strconv.Atoi(raw)
@@ -133,7 +146,7 @@ func messagesHandler(database *db.DB) http.HandlerFunc {
 			}
 		}
 
-		messages, err := database.GetRecentMessages(limit)
+		messages, err := database.GetRecentMessagesInRoom(room, limit)
 		if err != nil {
 			slog.Warn("list message history", "err", err)
 			http.Error(w, "message history unavailable", http.StatusInternalServerError)
@@ -145,6 +158,7 @@ func messagesHandler(database *db.DB) http.HandlerFunc {
 
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
+			"room":     room,
 			"messages": messages,
 			"limit":    limit,
 		})

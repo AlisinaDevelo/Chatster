@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/AliSinaDevelo/Chatster/db"
 	"github.com/AliSinaDevelo/Chatster/internal/config"
 	"github.com/AliSinaDevelo/Chatster/internal/metrics"
 	"github.com/gorilla/websocket"
@@ -25,6 +26,7 @@ type Client struct {
 	ID         string
 	Conn       *websocket.Conn
 	Username   string
+	Room       string
 	Hub        *Hub
 	writeMu    sync.Mutex // gorilla/websocket allows one writer at a time
 	usernameMu sync.RWMutex
@@ -59,6 +61,13 @@ func (c *Client) username() string {
 	c.usernameMu.RLock()
 	defer c.usernameMu.RUnlock()
 	return c.Username
+}
+
+func (c *Client) room() string {
+	if c.Room == "" {
+		return db.DefaultRoom
+	}
+	return c.Room
 }
 
 func (c *Client) enqueue(message Message) bool {
@@ -96,6 +105,7 @@ func (c *Client) sendRateLimitNotice() {
 		Username: "System",
 		Content:  "You are sending messages too quickly. Please slow down.",
 		Type:     "notification",
+		Room:     c.room(),
 	}
 	if !c.enqueue(notice) {
 		slog.Warn("queue rate limit notice")
@@ -203,8 +213,9 @@ func (c *Client) readMessages() {
 		}
 		msg.Content = body
 		msg.Username = c.username()
+		msg.Room = c.room()
 
-		dbMsg, err := saveMessageObserved(c.Hub.database, msg.Username, msg.Content, msg.Type)
+		dbMsg, err := saveMessageObservedInRoom(c.Hub.database, msg.Room, msg.Username, msg.Content, msg.Type)
 		if err != nil {
 			slog.Warn("save message", "err", err)
 		} else {

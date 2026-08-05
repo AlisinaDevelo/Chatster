@@ -115,6 +115,47 @@ func TestMessagesEndpointReturnsBoundedHistory(t *testing.T) {
 	}
 }
 
+func TestMessagesEndpointFiltersByRoom(t *testing.T) {
+	cfg, database, hub, cleanup := testStack(t)
+	defer cleanup()
+
+	if _, err := database.SaveMessageInRoom("general", "alice", "general only", "message"); err != nil {
+		t.Fatalf("save general message: %v", err)
+	}
+	if _, err := database.SaveMessageInRoom("engineering", "bob", "engineering only", "message"); err != nil {
+		t.Fatalf("save engineering message: %v", err)
+	}
+
+	srv := httptest.NewServer(mount(cfg, hub, database))
+	defer srv.Close()
+
+	resp, err := http.Get(srv.URL + "/api/messages?room=engineering")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status %d", resp.StatusCode)
+	}
+
+	var payload struct {
+		Room     string    `json:"room"`
+		Messages []Message `json:"messages"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload.Room != "engineering" {
+		t.Fatalf("room: got %q want engineering", payload.Room)
+	}
+	if len(payload.Messages) != 1 || payload.Messages[0].Content != "engineering only" {
+		t.Fatalf("unexpected room history: %#v", payload.Messages)
+	}
+	if payload.Messages[0].Room != "engineering" {
+		t.Fatalf("message room: got %q", payload.Messages[0].Room)
+	}
+}
+
 func TestMessagesEndpointRejectsInvalidLimit(t *testing.T) {
 	cfg, database, hub, cleanup := testStack(t)
 	defer cleanup()
@@ -123,6 +164,23 @@ func TestMessagesEndpointRejectsInvalidLimit(t *testing.T) {
 	defer srv.Close()
 
 	resp, err := http.Get(srv.URL + "/api/messages?limit=0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("want 400, got %d", resp.StatusCode)
+	}
+}
+
+func TestMessagesEndpointRejectsInvalidRoom(t *testing.T) {
+	cfg, database, hub, cleanup := testStack(t)
+	defer cleanup()
+
+	srv := httptest.NewServer(mount(cfg, hub, database))
+	defer srv.Close()
+
+	resp, err := http.Get(srv.URL + "/api/messages?room=bad%20room")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -293,6 +351,74 @@ func TestWebSocketUsernameAndMessage(t *testing.T) {
 		case <-deadline:
 			t.Fatal("timeout waiting for echoed chat message")
 		}
+	}
+}
+
+func TestWebSocketRoomsIsolateBroadcasts(t *testing.T) {
+	cfg, database, hub, cleanup := testStack(t)
+	defer cleanup()
+
+	srv := httptest.NewServer(mount(cfg, hub, database))
+	defer srv.Close()
+
+	general := mustDialWSRoom(t, srv, "general")
+	defer func() { _ = general.Close() }()
+	engineering := mustDialWSRoom(t, srv, "engineering")
+	defer func() { _ = engineering.Close() }()
+
+	if err := general.WriteJSON(Message{Type: "username", Content: "alice"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := engineering.WriteJSON(Message{Type: "username", Content: "bob"}); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(300 * time.Millisecond)
+
+	if err := general.WriteJSON(Message{Type: "message", Content: "general-only"}); err != nil {
+		t.Fatal(err)
+	}
+
+	generalMessage := readMatchingMessage(t, general, func(m Message) bool {
+		return m.Type == "message" && m.Content == "general-only"
+	})
+	if generalMessage.Room != "general" {
+		t.Fatalf("general message room: got %q", generalMessage.Room)
+	}
+
+	if err := engineering.SetReadDeadline(time.Now().Add(750 * time.Millisecond)); err != nil {
+		t.Fatal(err)
+	}
+	for {
+		var message Message
+		if err := engineering.ReadJSON(&message); err != nil {
+			if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
+				return
+			}
+			t.Fatalf("read engineering room: %v", err)
+		}
+		if message.Content == "general-only" {
+			t.Fatalf("message crossed room boundary: %#v", message)
+		}
+	}
+}
+
+func TestWebSocketRejectsInvalidRoom(t *testing.T) {
+	cfg, database, hub, cleanup := testStack(t)
+	defer cleanup()
+
+	srv := httptest.NewServer(mount(cfg, hub, database))
+	defer srv.Close()
+
+	c, resp, err := websocket.DefaultDialer.Dial(wsURLRoom(srv, "bad room"), nil)
+	if err == nil {
+		_ = c.Close()
+		t.Fatal("expected invalid room to fail websocket dial")
+	}
+	if resp == nil {
+		t.Fatal("expected HTTP response for invalid room")
+	}
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("want 400, got %d", resp.StatusCode)
 	}
 }
 
@@ -597,11 +723,24 @@ func wsURL(srv *httptest.Server) string {
 	return "ws" + strings.TrimPrefix(srv.URL, "http") + "/ws"
 }
 
+func wsURLRoom(srv *httptest.Server, room string) string {
+	return wsURL(srv) + "?room=" + room
+}
+
 func mustDialWS(t *testing.T, srv *httptest.Server) *websocket.Conn {
 	t.Helper()
 	c, resp, err := websocket.DefaultDialer.Dial(wsURL(srv), nil)
 	if err != nil {
 		t.Fatalf("dial: %v (resp=%v)", err, resp)
+	}
+	return c
+}
+
+func mustDialWSRoom(t *testing.T, srv *httptest.Server, room string) *websocket.Conn {
+	t.Helper()
+	c, resp, err := websocket.DefaultDialer.Dial(wsURLRoom(srv, room), nil)
+	if err != nil {
+		t.Fatalf("dial room %q: %v (resp=%v)", room, err, resp)
 	}
 	return c
 }

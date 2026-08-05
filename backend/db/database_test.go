@@ -2,6 +2,7 @@ package db
 
 import (
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -100,6 +101,13 @@ func TestOpenAppliesSchemaMigrations(t *testing.T) {
 	if name != "index_moderation_audit_timestamp" {
 		t.Fatalf("migration name: got %q want %q", name, "index_moderation_audit_timestamp")
 	}
+
+	if err := database.QueryRow("SELECT name FROM schema_migrations WHERE version = 5").Scan(&name); err != nil {
+		t.Fatalf("schema migration row: %v", err)
+	}
+	if name != "add_message_rooms" {
+		t.Fatalf("migration name: got %q want %q", name, "add_message_rooms")
+	}
 }
 
 func TestOpenMigrationsAreIdempotent(t *testing.T) {
@@ -191,6 +199,71 @@ func TestGetRecentMessagesOrder(t *testing.T) {
 	}
 	if got := []string{msgs[0].Content, msgs[1].Content, msgs[2].Content}; got[0] != "first" || got[1] != "second" || got[2] != "third" {
 		t.Fatalf("chronological order: %+v", got)
+	}
+}
+
+func TestNormalizeRoom(t *testing.T) {
+	for _, test := range []struct {
+		name    string
+		input   string
+		want    string
+		wantErr bool
+	}{
+		{name: "default", input: "", want: DefaultRoom},
+		{name: "trim and lowercase", input: " Engineering ", want: "engineering"},
+		{name: "hyphen and underscore", input: "team_ops-2", want: "team_ops-2"},
+		{name: "leading punctuation", input: "_hidden", wantErr: true},
+		{name: "embedded space", input: "team ops", wantErr: true},
+		{name: "slash", input: "team/ops", wantErr: true},
+		{name: "too long", input: strings.Repeat("a", maxRoomRunes+1), wantErr: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			got, err := NormalizeRoom(test.input)
+			if test.wantErr {
+				if err == nil {
+					t.Fatalf("NormalizeRoom(%q) should fail", test.input)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("NormalizeRoom(%q): %v", test.input, err)
+			}
+			if got != test.want {
+				t.Fatalf("NormalizeRoom(%q): got %q want %q", test.input, got, test.want)
+			}
+		})
+	}
+}
+
+func TestMessagesAreScopedToRooms(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "rooms.db")
+	database, err := Open(path)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	t.Cleanup(func() { _ = database.Close() })
+
+	if _, err := database.SaveMessage("alice", "general message", "message"); err != nil {
+		t.Fatalf("SaveMessage: %v", err)
+	}
+	if _, err := database.SaveMessageInRoom("engineering", "bob", "room message", "message"); err != nil {
+		t.Fatalf("SaveMessageInRoom: %v", err)
+	}
+
+	general, err := database.GetRecentMessagesInRoom(DefaultRoom, 10)
+	if err != nil {
+		t.Fatalf("general history: %v", err)
+	}
+	if len(general) != 1 || general[0].Content != "general message" || general[0].Room != DefaultRoom {
+		t.Fatalf("unexpected general history: %#v", general)
+	}
+
+	engineering, err := database.GetRecentMessagesInRoom("engineering", 10)
+	if err != nil {
+		t.Fatalf("engineering history: %v", err)
+	}
+	if len(engineering) != 1 || engineering[0].Content != "room message" || engineering[0].Room != "engineering" {
+		t.Fatalf("unexpected engineering history: %#v", engineering)
 	}
 }
 

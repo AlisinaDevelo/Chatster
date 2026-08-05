@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 	"unicode/utf8"
 
@@ -13,6 +14,11 @@ import (
 const sqliteBusyTimeoutMS = 5000
 
 const maxAuditPreviewRunes = 256
+
+const (
+	DefaultRoom  = "general"
+	maxRoomRunes = 32
+)
 
 type migration struct {
 	version int
@@ -61,7 +67,15 @@ CREATE INDEX IF NOT EXISTS idx_messages_timestamp
 		name:    "index_moderation_audit_timestamp",
 		sql: `
 CREATE INDEX IF NOT EXISTS idx_moderation_audit_log_julianday_timestamp
-	ON moderation_audit_log(julianday(timestamp));`,
+		ON moderation_audit_log(julianday(timestamp));`,
+	},
+	{
+		version: 5,
+		name:    "add_message_rooms",
+		sql: `
+ALTER TABLE messages ADD COLUMN room TEXT NOT NULL DEFAULT 'general';
+CREATE INDEX IF NOT EXISTS idx_messages_room_timestamp
+	ON messages(room, julianday(timestamp));`,
 	},
 }
 
@@ -71,6 +85,7 @@ type Message struct {
 	Username  string    `json:"username"`
 	Content   string    `json:"content"`
 	Type      string    `json:"type"`
+	Room      string    `json:"room"`
 	Timestamp time.Time `json:"timestamp"`
 }
 
@@ -191,24 +206,35 @@ func applyMigration(db *sql.DB, m migration) error {
 
 // SaveMessage saves a message to the database
 func (db *DB) SaveMessage(username, content, msgType string) (*Message, error) {
+	return db.SaveMessageInRoom(DefaultRoom, username, content, msgType)
+}
+
+// SaveMessageInRoom saves a message to the database for a validated room.
+func (db *DB) SaveMessageInRoom(room, username, content, msgType string) (*Message, error) {
+	room, err := NormalizeRoom(room)
+	if err != nil {
+		return nil, err
+	}
+
 	// Don't save system messages
 	if msgType == "username" {
 		return &Message{
 			Username:  username,
 			Content:   content,
 			Type:      msgType,
+			Room:      room,
 			Timestamp: time.Now(),
 		}, nil
 	}
 
-	stmt, err := db.Prepare("INSERT INTO messages(username, content, type, timestamp) VALUES(?, ?, ?, ?)")
+	stmt, err := db.Prepare("INSERT INTO messages(room, username, content, type, timestamp) VALUES(?, ?, ?, ?, ?)")
 	if err != nil {
 		return nil, err
 	}
 	defer func() { _ = stmt.Close() }()
 
 	now := time.Now()
-	result, err := stmt.Exec(username, content, msgType, now)
+	result, err := stmt.Exec(room, username, content, msgType, now)
 	if err != nil {
 		return nil, err
 	}
@@ -223,6 +249,7 @@ func (db *DB) SaveMessage(username, content, msgType string) (*Message, error) {
 		Username:  username,
 		Content:   content,
 		Type:      msgType,
+		Room:      room,
 		Timestamp: now,
 	}, nil
 }
@@ -296,7 +323,17 @@ INSERT INTO moderation_audit_log(
 
 // GetRecentMessages retrieves the most recent messages from the database
 func (db *DB) GetRecentMessages(limit int) ([]Message, error) {
-	rows, err := db.Query("SELECT id, username, content, type, timestamp FROM messages ORDER BY timestamp DESC LIMIT ?", limit)
+	return db.GetRecentMessagesInRoom(DefaultRoom, limit)
+}
+
+// GetRecentMessagesInRoom retrieves the most recent messages for a validated room.
+func (db *DB) GetRecentMessagesInRoom(room string, limit int) ([]Message, error) {
+	room, err := NormalizeRoom(room)
+	if err != nil {
+		return nil, err
+	}
+
+	rows, err := db.Query("SELECT id, room, username, content, type, timestamp FROM messages WHERE room = ? ORDER BY timestamp DESC LIMIT ?", room, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -306,7 +343,7 @@ func (db *DB) GetRecentMessages(limit int) ([]Message, error) {
 	for rows.Next() {
 		var msg Message
 		var timestamp string
-		if err := rows.Scan(&msg.ID, &msg.Username, &msg.Content, &msg.Type, &timestamp); err != nil {
+		if err := rows.Scan(&msg.ID, &msg.Room, &msg.Username, &msg.Content, &msg.Type, &timestamp); err != nil {
 			return nil, err
 		}
 
@@ -330,6 +367,35 @@ func (db *DB) GetRecentMessages(limit int) ([]Message, error) {
 	}
 
 	return messages, nil
+}
+
+// NormalizeRoom returns the canonical room name or an error for invalid input.
+func NormalizeRoom(room string) (string, error) {
+	room = strings.ToLower(strings.TrimSpace(room))
+	if room == "" {
+		return DefaultRoom, nil
+	}
+
+	runes := []rune(room)
+	if len(runes) > maxRoomRunes {
+		return "", fmt.Errorf("room must be at most %d characters", maxRoomRunes)
+	}
+
+	for i, r := range runes {
+		isLetter := r >= 'a' && r <= 'z'
+		isDigit := r >= '0' && r <= '9'
+		if i == 0 {
+			if !isLetter && !isDigit {
+				return "", fmt.Errorf("room must start with a letter or digit")
+			}
+			continue
+		}
+		if !isLetter && !isDigit && r != '_' && r != '-' {
+			return "", fmt.Errorf("room may contain only letters, digits, hyphens, and underscores")
+		}
+	}
+
+	return room, nil
 }
 
 func truncateRunes(s string, limit int) string {

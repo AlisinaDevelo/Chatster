@@ -19,6 +19,7 @@ type Message struct {
 	Username  string    `json:"username"`
 	Content   string    `json:"content"`
 	Type      string    `json:"type"`
+	Room      string    `json:"room,omitempty"`
 	Timestamp time.Time `json:"timestamp,omitempty"`
 }
 
@@ -37,8 +38,12 @@ func validMessageBody(s string) bool {
 }
 
 func saveMessageObserved(database *db.DB, username, content, msgType string) (*db.Message, error) {
+	return saveMessageObservedInRoom(database, db.DefaultRoom, username, content, msgType)
+}
+
+func saveMessageObservedInRoom(database *db.DB, room, username, content, msgType string) (*db.Message, error) {
 	started := time.Now()
-	msg, err := database.SaveMessage(username, content, msgType)
+	msg, err := database.SaveMessageInRoom(room, username, content, msgType)
 	result := "ok"
 	if err != nil {
 		result = "error"

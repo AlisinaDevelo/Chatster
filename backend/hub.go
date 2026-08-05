@@ -42,14 +42,16 @@ func (h *Hub) disconnectClientLocked(client *Client) {
 	if username == "Anonymous" {
 		return
 	}
+	room := client.room()
 
 	notification := Message{
 		Username: "System",
 		Content:  fmt.Sprintf("%s left the chat", username),
 		Type:     "notification",
+		Room:     room,
 	}
 
-	if _, err := saveMessageObserved(h.database, notification.Username, notification.Content, notification.Type); err != nil {
+	if _, err := saveMessageObservedInRoom(h.database, room, notification.Username, notification.Content, notification.Type); err != nil {
 		slog.Warn("save leave notification", "err", err)
 	}
 
@@ -67,13 +69,15 @@ func (h *Hub) run() {
 			go h.sendMessageHistory(client)
 
 			username := client.username()
+			room := client.room()
 			notification := Message{
 				Username: "System",
 				Content:  fmt.Sprintf("%s joined the chat", username),
 				Type:     "notification",
+				Room:     room,
 			}
 
-			_, err := saveMessageObserved(h.database, notification.Username, notification.Content, notification.Type)
+			_, err := saveMessageObservedInRoom(h.database, room, notification.Username, notification.Content, notification.Type)
 			if err != nil {
 				slog.Warn("save join notification", "err", err)
 			}
@@ -89,6 +93,9 @@ func (h *Hub) run() {
 			started := time.Now()
 			h.mutex.Lock()
 			for client := range h.clients {
+				if message.Room != "" && client.room() != message.Room {
+					continue
+				}
 				if !client.enqueue(message) {
 					metrics.WSOutboundDrops.WithLabelValues("slow_client").Inc()
 					slog.Warn("disconnect slow websocket client")
@@ -102,7 +109,8 @@ func (h *Hub) run() {
 }
 
 func (h *Hub) sendMessageHistory(client *Client) {
-	messages, err := h.database.GetRecentMessages(50)
+	room := client.room()
+	messages, err := h.database.GetRecentMessagesInRoom(room, 50)
 	if err != nil {
 		slog.Warn("message history", "err", err)
 		return
@@ -114,6 +122,7 @@ func (h *Hub) sendMessageHistory(client *Client) {
 			Username:  msg.Username,
 			Content:   msg.Content,
 			Type:      msg.Type,
+			Room:      msg.Room,
 			Timestamp: msg.Timestamp,
 		}
 		if !client.enqueue(message) {
@@ -126,6 +135,7 @@ func (h *Hub) sendMessageHistory(client *Client) {
 		Username: "System",
 		Content:  "Welcome to the chat! You can see the last 50 messages.",
 		Type:     "notification",
+		Room:     room,
 	}
 	if !client.enqueue(welcome) {
 		slog.Warn("queue welcome message")
