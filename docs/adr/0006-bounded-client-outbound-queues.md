@@ -28,4 +28,4 @@ Write failures in the client writer increment `chatster_websocket_outbound_drops
 
 **Negative:** A client can be disconnected during a short network stall if its outbound queue fills. The queue size is intentionally conservative for the demo and should be tuned with production traffic.
 
-**Follow-ups:** Expose queue depth if this becomes a real service, and consider per-room fan-out or pub/sub when the single-process hub becomes the bottleneck.
+**Follow-ups:** Expose queue depth if this becomes a real service, and consider per-room fan-out workers or pub/sub when the single-process hub becomes the bottleneck. Room filtering is already enforced at the current hub boundary.

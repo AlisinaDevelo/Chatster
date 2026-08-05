@@ -58,7 +58,7 @@ jobs:
           curl -fsS "http://${CHATSTER_HTTP_ADDR}/health" >/dev/null
 
           go run ./cmd/wsload \
-            -url "ws://${CHATSTER_HTTP_ADDR}/ws" \
+            -url "ws://${CHATSTER_HTTP_ADDR}/ws?room=general" \
             -clients 4 \
             -messages 3 \
             -settle-for 250ms \
@@ -128,7 +128,8 @@ jobs:
           curl -fsS http://127.0.0.1:18081/health
           curl -fsS http://127.0.0.1:18081/ | grep -q "Chatster"
           curl -fsS http://127.0.0.1:18081/rooms/general | grep -q "Chatster"
-          curl -fsS "http://127.0.0.1:18081/api/messages?limit=1" | grep -q '"messages":\[\]'
+          curl -fsS http://127.0.0.1:18081/rooms/engineering | grep -q "Chatster"
+          curl -fsS "http://127.0.0.1:18081/api/messages?limit=1&room=engineering" | grep -q '"messages":\[\]'
           curl -fsS http://127.0.0.1:18081/metrics | grep -q "chatster_"
 
           docker stop chatster-prod-smoke

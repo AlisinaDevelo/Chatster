@@ -54,8 +54,8 @@ From the repository root:
 docker compose up --build
 ```
 
-- API: [http://localhost:8080](http://localhost:8080) (WebSocket: `ws://localhost:8080/ws`)
-- Web UI: [http://localhost:3000](http://localhost:3000) (static build; browser connects to `ws://localhost:8080/ws`)
+- API: [http://localhost:8080](http://localhost:8080) (WebSocket: `ws://localhost:8080/ws?room=general`)
+- Web UI: [http://localhost:3000](http://localhost:3000) (static build; browser connects to the selected room, default `ws://localhost:8080/ws?room=general`)
 
 SQLite data persists in the **`chatster-data`** Docker volume.
 
@@ -74,7 +74,7 @@ docker run --rm \
 
 - UI/API: [http://localhost:8080](http://localhost:8080)
 - Health: [http://localhost:8080/health](http://localhost:8080/health)
-- WebSocket: `ws://localhost:8080/ws`
+- WebSocket: `ws://localhost:8080/ws?room=general`
 
 ## Persistence
 

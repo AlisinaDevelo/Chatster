@@ -21,7 +21,7 @@ The backend job uploads a **`backend-runtime-proof`** artifact containing:
 
 Requirements: Go **1.22**, Node **20**, [golangci-lint](https://golangci-lint.run/) **v2** config at **`.golangci.yml`** (repo root), and a lockfile (`frontend/package-lock.json`) in sync with `package.json`.
 
-The production image job waits for `/health`, then checks the React shell at `/`, SPA fallback at `/rooms/general`, empty history from `/api/messages?limit=1`, and Prometheus output from `/metrics`.
+The production image job waits for `/health`, then checks the React shell at `/`, SPA fallback at `/rooms/general`, empty history from `/api/messages?limit=1&room=general`, and Prometheus output from `/metrics`.
 
 ## Dependency updates
 
@@ -64,7 +64,7 @@ Server listens on **`:8080`** by default and writes **`chatster.db`** in the cur
 cd frontend && npm install && npm start
 ```
 
-The dev client targets **`ws://127.0.0.1:8080/ws`** by default. If the backend uses another port, set `VITE_WS_PORT` or `VITE_WS_URL` (see `frontend/.env.example`).
+The dev client targets **`ws://127.0.0.1:8080/ws?room=general`** by default. The UI changes the room query and route together. If the backend uses another port, set `VITE_WS_PORT` or `VITE_WS_URL` (see `frontend/.env.example`).
 
 Open [http://localhost:3000](http://localhost:3000) to see the UI.
 

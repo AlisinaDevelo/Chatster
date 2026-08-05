@@ -2,7 +2,8 @@
 
 Vite + React shell for the Chatster WebSocket client.
 
-- **`npm start`** — dev server ([http://localhost:3000](http://localhost:3000)); expects the API on `ws://127.0.0.1:8080/ws` unless overridden via env (see `.env.example`).
+- **`npm start`** — dev server ([http://localhost:3000](http://localhost:3000)); expects the API on `ws://127.0.0.1:8080/ws?room=general` unless overridden via env (see `.env.example`).
+- Room routes use `/rooms/<name>`; the current selector offers `general`, `engineering`, and `off-topic`, with `general` as the fallback.
 - **Docker** — production-style image with nginx: `docker compose up --build` from the repo root (see root [README.md](../README.md)).
 - **`npm run test`** / **`npm run test:ci`** — Vitest.
 - **`npm run build`** — static assets for deployment.

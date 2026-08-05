@@ -11,7 +11,8 @@ Real-time chat reference stack: **Go** WebSocket hub + **SQLite** history, **Rea
 ## Highlights
 
 - WebSocket broadcast with reconnect, **buffered hub channel**, **bounded per-client outbound queues**, and safe gorilla/websocket write serialization.
-- Last **50** messages replayed on connect; **SQLite timestamp** parsing supports multiple on-disk formats.
+- Room-scoped chat and history, with `general` as the default and selectable `engineering` / `off-topic` rooms in the UI.
+- Last **50** messages replayed on connect per room; **SQLite timestamp** parsing supports multiple on-disk formats.
 - **`GET /health`** with SQLite ping (503 when degraded); **`GET /metrics`** for Prometheus.
 - **Abuse controls:** max username/message size (runes), per-IP **WebSocket upgrade** rate limit, per-client **message** rate limit, optional **`Origin`** allowlist.
 - Structured JSON logs (`slog`), graceful shutdown, GitHub Actions (lint, test + coverage artifact, WebSocket load smoke, ESLint, build, production image smoke), Dependabot, Docker Compose, single-service production image.
@@ -23,8 +24,8 @@ Real-time chat reference stack: **Go** WebSocket hub + **SQLite** history, **Rea
 
 ```mermaid
 flowchart LR
-  Browser[React + Vite SPA] -->|WebSocket /ws| Server[Go HTTP and WebSocket server]
-  Browser -->|GET /api/messages| Server
+  Browser[React + Vite SPA] -->|WebSocket /ws?room=...| Server[Go HTTP and WebSocket server]
+  Browser -->|GET /api/messages?room=...| Server
   Server --> Hub[Hub and bounded client queues]
   Server --> History[History API]
   Hub --> SQLite[(SQLite)]
@@ -32,7 +33,7 @@ flowchart LR
   Server --> Health["/health + /metrics"]
 ```
 
-The server validates and rate-limits WebSocket input, persists accepted messages, and enqueues fan-out to each client. The same process serves the built SPA, reconnect history, health checks, and Prometheus metrics. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the message flow, lifecycle states, and scaling boundaries.
+The server validates and rate-limits WebSocket input, persists accepted messages by room, and enqueues fan-out only to clients in that room. The same process serves the built SPA, room-filtered reconnect history, health checks, and Prometheus metrics. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the message flow, lifecycle states, and scaling boundaries.
 
 ## Measured results
 
@@ -84,8 +85,9 @@ Open **http://localhost:3000**. Use two browser tabs or windows to test live mes
 
 1. Open the UI in two tabs.
 2. Join each tab with a different display name.
-3. Send a message from either tab and confirm both histories update.
-4. Refresh one tab and confirm recent history catches up after reconnect.
+3. Keep both tabs in **#general**, send a message, and confirm both histories update.
+4. Switch one tab to **#engineering**, send a message, and confirm the #general tab does not receive it.
+5. Refresh the engineering tab and confirm room history catches up after reconnect.
 
 The production path serves the UI and API from one origin; CI builds and smoke-tests that container on every push.
 

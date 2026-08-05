@@ -6,8 +6,8 @@ The UI is a **Vite + React** SPA: strong focus on **clarity, accessibility, and 
 
 | Area | Stance |
 |------|--------|
-| **State** | Local React state + WebSocket callbacks—appropriate for a single-screen chat without global client stores. |
-| **Data fetching** | WebSocket events plus the REST history endpoint for initial load and reconnect catch-up. |
+| **State** | Local React state + WebSocket callbacks—appropriate for a single-screen chat without global client stores. The active room is mirrored in `/rooms/<name>`. |
+| **Data fetching** | Room-aware WebSocket events plus `GET /api/messages?room=...` for initial load and reconnect catch-up. |
 | **Build tooling** | Vite 8 with the output directory kept at `build/` for the Go server and container image. |
 
 ## Accessibility (a11y)
@@ -18,6 +18,7 @@ Implemented practices include:
 - **Live region:** message list uses `role="log"` and `aria-live="polite"` so assistive tech is notified of new messages (tunable if volume becomes noisy).
 - **Keyboard scrolling:** the scrollable message log is tabbable and exposes a visible focus ring, so keyboard users can enter and scroll the history directly.
 - **Announcement preference:** the **Quiet updates** checkbox persists locally and switches the message log to `aria-live="off"` for high-traffic rooms.
+- **Room navigation:** the header exposes a labeled native select for the active room, with URL state and reconnect/history behavior kept in sync.
 - **Forms:** visible labels (or visually hidden where design uses placeholders), `aria-describedby` for hints, submit disabled when disconnected.
 - **Motion:** global `prefers-reduced-motion` respected in styles (see `index.css` / component SCSS).
 - **Automated checks:** the rendered app runs an axe-core accessibility smoke test in `App.test.jsx`, which executes in the normal Vitest/CI path.
@@ -34,7 +35,7 @@ Implemented practices include:
 
 ## Testing
 
-- **Vitest + Testing Library** for components and mocked WebSocket `api` module.
+- **Vitest + Testing Library** for components, room routing, room-aware history requests, and mocked WebSocket `api` module.
 - **E2E** (Playwright/Cypress) is a documented extension in [WORKFLOWS.md](WORKFLOWS.md)—not required for unit coverage.
 
 ## Security (client)

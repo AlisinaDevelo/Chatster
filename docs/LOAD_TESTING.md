@@ -16,7 +16,7 @@ In another terminal:
 ```bash
 cd backend
 go run ./cmd/wsload \
-  -url ws://127.0.0.1:8080/ws \
+  -url ws://127.0.0.1:8080/ws?room=general \
   -clients 25 \
   -messages 20 \
   -settle-for 1s \
@@ -41,7 +41,7 @@ The GitHub Actions backend job starts a local Chatster server with WS/message ra
 
 ```bash
 go run ./cmd/wsload \
-  -url ws://127.0.0.1:18080/ws \
+  -url ws://127.0.0.1:18080/ws?room=general \
   -clients 4 \
   -messages 3 \
   -settle-for 250ms \

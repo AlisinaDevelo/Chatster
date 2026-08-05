@@ -7,7 +7,7 @@ Chatster is intentionally a **single-process, single-node** reference. This docu
 | Constraint | Implication |
 |------------|-------------|
 | One Go process | All WebSocket fan-out and HTTP share CPU, memory, and goroutine budget. |
-| In-memory hub | Connected clients exist only in this process; no cross-instance awareness. |
+| In-memory hub | Connected clients exist only in this process; room membership and broadcasts have no cross-instance awareness. |
 | SQLite (single file) | One writer at a time; concurrent writes queue; file on local disk. |
 | Synchronous broadcast loop | Slow `WriteJSON` to one client blocks the hub from processing the next broadcast until that iteration completes (mitigated partially by closing dead clients). |
 | Unbuffered fan-out | Sending on an **unbuffered** `broadcast` channel from the same connection’s read loop **deadlocks** with the hub writing to that socket; this repo uses a **buffered** channel and **per-connection write locks** (see `Client.writeJSON`). |
@@ -15,7 +15,7 @@ Chatster is intentionally a **single-process, single-node** reference. This docu
 ## What breaks first (order of pain)
 
 1. **WebSocket fan-out under load** — Broadcasting to thousands of clients from one goroutine loop increases latency per message; slow clients stall others. **Symptoms:** rising end-to-end message delay, timeouts, growing goroutines if work leaks.  
-   **Next steps:** shard by room; move to a **message bus** (Redis Pub/Sub, NATS, Kafka) so instances publish once; or use a dedicated real-time layer (managed WebSocket/Pusher-class service).
+   **Next steps:** shard the existing room-scoped hub by room; move to a **message bus** (Redis Pub/Sub, NATS, Kafka) so instances publish once; or use a dedicated real-time layer (managed WebSocket/Pusher-class service).
 
 2. **SQLite write throughput** — Every persisted message serializes on the DB file. **Symptoms:** `database is locked`, growing save latency, `/health` degrading under ping+write contention.  
    **Next steps:** **Postgres** (or another server RDBMS) with connection pooling; batch writes; separate read replicas for history if reads dominate.

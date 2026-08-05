@@ -1,6 +1,6 @@
 # Architecture
 
-Chatster is a small full-stack demo: a **Go** HTTP server with a **WebSocket** hub, **SQLite** persistence, and a **React** single-page client.
+Chatster is a small full-stack demo: a **Go** HTTP server with a room-scoped **WebSocket** hub, **SQLite** persistence, and a **React** single-page client. The default room is `general`; the frontend currently offers `general`, `engineering`, and `off-topic`.
 
 ## Components
 
@@ -17,7 +17,7 @@ flowchart LR
     Prom[Prometheus /metrics]
   end
   UI --> WSClient
-  WSClient <-->|JSON messages| Mux
+  WSClient <-->|JSON messages + room| Mux
   Mux --> Hub
   Mux --> Prom
   Hub --> DB
@@ -27,19 +27,21 @@ flowchart LR
 
 ### Backend (`backend/`)
 
-- **`main.go`**: HTTP server with **graceful shutdown**, **`log/slog`** JSON logs, routes, WebSocket upgrade (`/ws`), CORS, **Prometheus `/metrics`**, and the **hub** (`Hub.run`) that registers clients and broadcasts JSON.
+- **`main.go`**: HTTP server with **graceful shutdown**, **`log/slog`** JSON logs, routes, room-aware WebSocket upgrade (`/ws?room=...`), CORS, **Prometheus `/metrics`**, and the **hub** (`Hub.run`) that registers clients and broadcasts JSON within a room.
 - **`internal/config`**: `CHATSTER_*` environment variables (listen address, DB path, **Origin allowlist**, **WS upgrade and message rate limits**).
 - **`internal/metrics`**: Prometheus metric definitions (`chatster_*`).
 - **`internal/ratelimit`**: Per-IP token bucket for WebSocket **upgrade** attempts.
-- **`db/`**: SQLite — ordered schema migrations (`schema_migrations` ledger), `messages` table, `SaveMessage`, `GetRecentMessages` with **flexible timestamp parsing** (RFC3339 and legacy layouts).
+- **`db/`**: SQLite — ordered schema migrations (`schema_migrations` ledger), room-scoped `messages` table, `SaveMessageInRoom`, `GetRecentMessagesInRoom`, and **flexible timestamp parsing** (RFC3339 and legacy layouts).
 
 **Message flow**
 
-1. Client opens `GET /ws` → upgraded (subject to **rate limit** and **`Origin`** policy when configured).
+1. Client opens `GET /ws?room=<name>` → the room name is normalized and upgraded (blank means `general`; subject to **rate limit** and **`Origin`** policy when configured).
 2. First client message with `type: "username"` sets display name; not stored as a chat row.
 3. Client payloads are validated (**max runes** for username and message body); non-`message` types from clients are coerced to `message` to reduce spoofing of server-only notification types.
-4. Chat messages are saved (when possible), then broadcast with `id` and `timestamp` when available.
-5. Join/leave notifications are persisted like other rows (except the username handshake).
+4. Chat messages are saved (when possible), then broadcast with `room`, `id`, and `timestamp` when available to clients in the same room.
+5. Join/leave notifications are persisted and broadcast within the room like other rows (except the username handshake).
+
+Room names are validated as short ASCII identifiers by the backend. The frontend keeps the active room in `/rooms/<name>`, preserves it across reconnect/history requests, and exposes a small preset list through the header selector.
 
 ```mermaid
 sequenceDiagram
@@ -49,15 +51,15 @@ sequenceDiagram
   participant DB as SQLite
   participant Peers as Other clients
 
-  User->>WS: open GET /ws
+  User->>WS: open GET /ws?room=engineering
   WS->>Hub: upgrade (rate limit + Origin check)
   WS->>Hub: {type: "username", content}
   Hub->>Hub: validate (max runes), set display name
   Hub->>WS: replay recent history
   User->>WS: {type: "message", content}
   Hub->>Hub: validate + coerce non-message types
-  Hub->>DB: SaveMessage (best effort)
-  Hub-->>Peers: enqueue broadcast (id + timestamp)
+  Hub->>DB: SaveMessageInRoom (best effort)
+  Hub-->>Peers: enqueue room broadcast (id + timestamp)
   Hub-->>WS: echo own message
 ```
 
@@ -65,6 +67,7 @@ sequenceDiagram
 
 - **`broadcast`** uses a **buffered** channel so a client’s read loop does not deadlock when the hub writes back to the same socket (see [adr/0005](adr/0005-broadcast-channel-and-writer-lock.md)).
 - The hub does **not** write directly to sockets during fan-out. It enqueues messages into each client's bounded outbound queue (see [adr/0006](adr/0006-bounded-client-outbound-queues.md)).
+- The hub filters fan-out by the client's selected room before enqueueing, so a message in one room is not delivered to another room.
 - Each client has one writer goroutine. All server writes to a given `*websocket.Conn` still go through **`Client.writeJSON`** (mutex) because **gorilla/websocket** permits only one concurrent writer per connection (queued messages + heartbeat control frames can otherwise race).
 - A full outbound queue is treated as a slow-client failure: the server disconnects that client and increments `chatster_websocket_outbound_drops_total{reason="slow_client"}`.
 
@@ -94,8 +97,8 @@ stateDiagram-v2
 
 ### Frontend (`frontend/`)
 
-- **`src/api/index.js`**: WebSocket lifecycle, reconnect, `disconnect` on unmount.
-- **`App.js`**: Connection state, username handshake, message list.
+- **`src/api/index.js`**: Room-aware WebSocket lifecycle, reconnect, history fetches, and `disconnect` on unmount.
+- **`App.jsx` / `src/rooms.js`**: Connection state, URL-backed room selection, username handshake, and message list.
 - **Styling**: SCSS + tokens; **accessibility** notes in [FRONTEND.md](FRONTEND.md).
 
 ### Data model
@@ -111,6 +114,7 @@ erDiagram
     text    username
     text    content
     text    type "message / join / leave"
+    text    room
     text    timestamp "RFC3339 or legacy"
   }
   SCHEMA_MIGRATIONS {
@@ -147,4 +151,4 @@ See `backend/.env.example` and `frontend/.env.example`.
 
 - **[SCALING.md](SCALING.md)** — failure order, SQLite limits, multi-instance options.
 - **[NON_GOALS.md](NON_GOALS.md)** — explicit exclusions.
-- Code ideas: JWT/session auth, rooms, hub drain on shutdown, OpenTelemetry ([OBSERVABILITY.md](OBSERVABILITY.md)).
+- Code ideas: JWT/session auth, presence, hub drain on shutdown, OpenTelemetry ([OBSERVABILITY.md](OBSERVABILITY.md)).
