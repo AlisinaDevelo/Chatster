@@ -1,7 +1,9 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net"
 	"net/http"
@@ -31,7 +33,14 @@ func testStack(t *testing.T) (cfg config.Config, database *db.DB, hub *Hub, clea
 	}
 	h := newHub(d)
 	go h.run()
-	return cfg, d, h, func() { _ = d.Close() }
+	return cfg, d, h, func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		if err := h.Shutdown(ctx); err != nil {
+			t.Errorf("hub shutdown: %v", err)
+		}
+		_ = d.Close()
+	}
 }
 
 func TestHealth_OK(t *testing.T) {
@@ -296,6 +305,16 @@ func TestMetricsEndpoint(t *testing.T) {
 	}
 	if !strings.Contains(string(body), "chatster_websocket_broadcast_fanout_duration_seconds_bucket") {
 		t.Fatalf("metrics body missing broadcast fanout latency histogram")
+	}
+	for _, metric := range []string{
+		"chatster_websocket_drains_started_total",
+		"chatster_websocket_drain_duration_seconds_bucket",
+		"chatster_websocket_drain_clients_remaining",
+		"chatster_websocket_drain_forced_closes_total",
+	} {
+		if !strings.Contains(string(body), metric) {
+			t.Fatalf("metrics body missing %s", metric)
+		}
 	}
 }
 
@@ -638,6 +657,73 @@ func TestWebSocketMessageRateLimit(t *testing.T) {
 	}
 	if got := moderationReasonCount(t, database, "rate_limited"); got != 1 {
 		t.Fatalf("rate limited message should be audited once, got %d", got)
+	}
+}
+
+func TestHubShutdownDrainsWebSocketClients(t *testing.T) {
+	cfg, database, hub, cleanup := testStack(t)
+	defer cleanup()
+
+	srv := httptest.NewServer(mount(cfg, hub, database))
+	defer srv.Close()
+
+	c := mustDialWS(t, srv)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	if err := hub.Shutdown(ctx); err != nil {
+		cancel()
+		t.Fatalf("hub shutdown: %v", err)
+	}
+	cancel()
+
+	if err := c.SetReadDeadline(time.Now().Add(2 * time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := c.ReadMessage(); err == nil || !websocket.IsCloseError(err, shutdownCloseCode) {
+		t.Fatalf("expected service-restart close code %d, got %v", shutdownCloseCode, err)
+	}
+
+	_, resp, err := websocket.DefaultDialer.Dial(wsURL(srv), nil)
+	if err == nil {
+		t.Fatal("new WebSocket registration should be rejected while draining")
+	}
+	if resp == nil || resp.StatusCode != http.StatusServiceUnavailable {
+		if resp == nil {
+			t.Fatalf("expected 503 response while draining, got %v", err)
+		}
+		t.Fatalf("expected 503 response while draining, got %d", resp.StatusCode)
+	}
+
+	serverCtx, serverCancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer serverCancel()
+	if err := shutdownServer(serverCtx, srv.Config, hub); err != nil {
+		t.Fatalf("server shutdown: %v", err)
+	}
+	_ = c.Close()
+}
+
+func TestHubShutdownReportsForcedClientClose(t *testing.T) {
+	database, err := db.Open(filepath.Join(t.TempDir(), "forced-drain.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	hub := newHub(database)
+	go hub.run()
+
+	client := &Client{
+		send: make(chan Message, 1),
+		done: make(chan struct{}),
+	}
+	hub.mutex.Lock()
+	hub.clients[client] = true
+	hub.mutex.Unlock()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+	if err := hub.Shutdown(ctx); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("expected deadline error for unfinished client, got %v", err)
+	}
+	if err := database.Close(); err != nil {
+		t.Fatal(err)
 	}
 }
 

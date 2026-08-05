@@ -73,9 +73,18 @@ func main() {
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	if err := srv.Shutdown(shutdownCtx); err != nil {
+	if err := shutdownServer(shutdownCtx, srv, hub); err != nil {
 		slog.Error("graceful shutdown", "err", err)
 		os.Exit(1)
 	}
 	slog.Info("server stopped")
+}
+
+func shutdownServer(ctx context.Context, srv *http.Server, hub *Hub) error {
+	hubErr := hub.Shutdown(ctx)
+	serverErr := srv.Shutdown(ctx)
+	if hubErr != nil {
+		return hubErr
+	}
+	return serverErr
 }

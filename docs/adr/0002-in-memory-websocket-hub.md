@@ -10,12 +10,14 @@ Real-time delivery must be low-latency for a classroom-scale demo. The team want
 
 ## Decision
 
-Maintain a **single goroutine** (`Hub.run`) with channels for register/unregister/broadcast and an in-memory `map` of clients.
+Maintain one hub event loop (`Hub.run`) for broadcast and unregister work, plus a
+mutex-protected admission path for registration and shutdown state. The hub keeps an
+in-memory `map` of clients and uses no external broker for the default experience.
 
 ## Consequences
 
 **Positive:** Simple mental model; easy to read; no extra infrastructure.
 
-**Negative:** **Not horizontally scalable** without a shared pub/sub layer; broadcast loop can become a bottleneck; graceful drain of WS on shutdown is not fully implemented.
+**Negative:** **Not horizontally scalable** without a shared pub/sub layer; the broadcast loop can become a bottleneck; the hub still keeps all live connection state in one process.
 
-**Follow-up:** Introduce Redis Pub/Sub (or equivalent) and sticky sessions—or a dedicated gateway—when running multiple replicas.
+**Follow-up:** Introduce Redis Pub/Sub (or equivalent) and sticky sessions—or a dedicated gateway—when running multiple replicas. Shutdown draining is defined in [ADR 0007](0007-websocket-drain-lifecycle.md).

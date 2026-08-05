@@ -17,7 +17,11 @@ Namespaces and names follow `chatster_*` where applicable. Inspect `/metrics` on
 | Metric | Type | What it tells you |
 |--------|------|-------------------|
 | `chatster_websocket_clients_connected` | Gauge | Current active WebSocket clients. |
-| `chatster_websocket_upgrades_total{result}` | Counter | Upgrade attempts by outcome: `ok`, `denied_origin`, `rate_limited`, `upgrade_error`. |
+| `chatster_websocket_upgrades_total{result}` | Counter | Upgrade attempts by outcome: `ok`, `denied_origin`, `rate_limited`, `upgrade_error`, `draining`. |
+| `chatster_websocket_drains_started_total` | Counter | WebSocket hub drain operations started during process shutdown. |
+| `chatster_websocket_drain_duration_seconds` | Histogram | Duration of each WebSocket hub drain operation. |
+| `chatster_websocket_drain_clients_remaining` | Gauge | Client loops that have not reported completion during a drain. |
+| `chatster_websocket_drain_forced_closes_total` | Counter | Clients still active when the shutdown drain deadline expired. |
 | `chatster_websocket_outbound_drops_total{reason}` | Counter | Outbound drops by reason: `slow_client`, `write_error`. |
 | `chatster_chat_messages_ingested_total` | Counter | Valid chat messages accepted for persistence and broadcast. |
 | `chatster_chat_messages_rejected_total{reason}` | Counter | Rejected chat inputs by reason: `invalid_username`, `invalid_body`, `rate_limited`. |

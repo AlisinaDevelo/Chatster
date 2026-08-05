@@ -16,8 +16,33 @@ var (
 	WSUpgrades = promauto.NewCounterVec(prometheus.CounterOpts{
 		Namespace: "chatster",
 		Name:      "websocket_upgrades_total",
-		Help:      "WebSocket upgrade attempts by result (ok, denied_origin, rate_limited, upgrade_error).",
+		Help:      "WebSocket upgrade attempts by result (ok, denied_origin, rate_limited, upgrade_error, draining).",
 	}, []string{"result"})
+
+	WSDrainStarted = promauto.NewCounter(prometheus.CounterOpts{
+		Namespace: "chatster",
+		Name:      "websocket_drains_started_total",
+		Help:      "WebSocket hub drain operations started.",
+	})
+
+	WSDrainDuration = promauto.NewHistogram(prometheus.HistogramOpts{
+		Namespace: "chatster",
+		Name:      "websocket_drain_duration_seconds",
+		Help:      "Duration of WebSocket hub drain operations.",
+		Buckets:   []float64{0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10, 30},
+	})
+
+	WSDrainClientsRemaining = promauto.NewGauge(prometheus.GaugeOpts{
+		Namespace: "chatster",
+		Name:      "websocket_drain_clients_remaining",
+		Help:      "Active WebSocket clients that have not completed a shutdown drain.",
+	})
+
+	WSDrainForcedCloses = promauto.NewCounter(prometheus.CounterOpts{
+		Namespace: "chatster",
+		Name:      "websocket_drain_forced_closes_total",
+		Help:      "WebSocket clients still active when the shutdown drain deadline expired.",
+	})
 
 	WSOutboundDrops = promauto.NewCounterVec(prometheus.CounterOpts{
 		Namespace: "chatster",

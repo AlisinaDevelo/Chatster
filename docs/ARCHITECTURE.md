@@ -27,7 +27,7 @@ flowchart LR
 
 ### Backend (`backend/`)
 
-- **`main.go`**: HTTP server with **graceful shutdown**, **`log/slog`** JSON logs, routes, room-aware WebSocket upgrade (`/ws?room=...`), CORS, **Prometheus `/metrics`**, and the **hub** (`Hub.run`) that registers clients and broadcasts JSON within a room.
+- **`main.go`**: HTTP server with **graceful shutdown**, explicit WebSocket hub draining, **`log/slog`** JSON logs, routes, room-aware WebSocket upgrade (`/ws?room=...`), CORS, **Prometheus `/metrics`**, and the **hub** (`Hub.run`) that manages client lifecycle and broadcasts JSON within a room.
 - **`internal/config`**: `CHATSTER_*` environment variables (listen address, DB path, **Origin allowlist**, **WS upgrade and message rate limits**).
 - **`internal/metrics`**: Prometheus metric definitions (`chatster_*`).
 - **`internal/ratelimit`**: Per-IP token bucket for WebSocket **upgrade** attempts.
@@ -66,10 +66,18 @@ sequenceDiagram
 **Concurrency**
 
 - **`broadcast`** uses a **buffered** channel so a client’s read loop does not deadlock when the hub writes back to the same socket (see [adr/0005](adr/0005-broadcast-channel-and-writer-lock.md)).
+- Registration is guarded by the hub mutex and rejected once draining begins; the event loop owns broadcast and unregister processing.
 - The hub does **not** write directly to sockets during fan-out. It enqueues messages into each client's bounded outbound queue (see [adr/0006](adr/0006-bounded-client-outbound-queues.md)).
 - The hub filters fan-out by the client's selected room before enqueueing, so a message in one room is not delivered to another room.
 - Each client has one writer goroutine. All server writes to a given `*websocket.Conn` still go through **`Client.writeJSON`** (mutex) because **gorilla/websocket** permits only one concurrent writer per connection (queued messages + heartbeat control frames can otherwise race).
 - A full outbound queue is treated as a slow-client failure: the server disconnects that client and increments `chatster_websocket_outbound_drops_total{reason="slow_client"}`.
+
+**Shutdown lifecycle**
+
+- SIGINT/SIGTERM atomically puts the hub into **draining** mode before the HTTP shutdown deadline begins; new WebSocket upgrades receive HTTP **503** and are not registered.
+- Existing clients receive WebSocket close code **1012 (service restart)** with the reason `server shutting down`, then their socket is closed so blocked read/write loops can finish.
+- The hub waits for client read-loop completion and stops its run goroutine. If the shared 30-second shutdown context expires, remaining clients are counted as forced closes and the process continues its final HTTP shutdown.
+- Drain logs include only client counts, duration, close code, and forced-close counts. Message bodies are never included.
 
 **Client connection lifecycle**
 
@@ -84,6 +92,8 @@ stateDiagram-v2
   Throttled --> Joined: tokens refill
   Joined --> Dropped: outbound queue full (slow client)
   Joined --> Disconnected: client closes / read error
+  Joined --> Draining: server shutdown
+  Draining --> Disconnected: close code 1012
   Rejected --> [*]
   Dropped --> [*]
   Disconnected --> [*]
@@ -151,4 +161,4 @@ See `backend/.env.example` and `frontend/.env.example`.
 
 - **[SCALING.md](SCALING.md)** — failure order, SQLite limits, multi-instance options.
 - **[NON_GOALS.md](NON_GOALS.md)** — explicit exclusions.
-- Code ideas: JWT/session auth, presence, hub drain on shutdown, OpenTelemetry ([OBSERVABILITY.md](OBSERVABILITY.md)).
+- Code ideas: JWT/session auth, presence, OpenTelemetry ([OBSERVABILITY.md](OBSERVABILITY.md)).

@@ -54,6 +54,11 @@ func serveWs(hub *Hub, cfg config.Config, up websocket.Upgrader, wsRL *ratelimit
 		http.Error(w, "invalid room", http.StatusBadRequest)
 		return
 	}
+	if hub.isDraining() {
+		metrics.WSUpgrades.WithLabelValues("draining").Inc()
+		http.Error(w, "server shutting down", http.StatusServiceUnavailable)
+		return
+	}
 
 	ip := clientIP(r)
 	if wsRL != nil && !wsRL.Allow(ip) {
@@ -74,7 +79,6 @@ func serveWs(hub *Hub, cfg config.Config, up websocket.Upgrader, wsRL *ratelimit
 		return
 	}
 	metrics.WSUpgrades.WithLabelValues("ok").Inc()
-	metrics.ConnectedClients.Inc()
 
 	client := &Client{
 		ID:         newSessionID(),
@@ -88,7 +92,12 @@ func serveWs(hub *Hub, cfg config.Config, up websocket.Upgrader, wsRL *ratelimit
 	}
 
 	go client.writeMessages()
-	hub.register <- client
+	if !hub.registerClient(client) {
+		metrics.WSUpgrades.WithLabelValues("draining").Inc()
+		client.closeForShutdown()
+		return
+	}
+	metrics.ConnectedClients.Inc()
 
 	go client.readMessages()
 }

@@ -42,7 +42,17 @@ The API emits **structured JSON logs** on stdout via `log/slog` (Go 1.22+). Aggr
 
 ## Process lifecycle
 
-The server handles **SIGINT** and **SIGTERM** and attempts **graceful HTTP shutdown** with a **30s** timeout. Long-lived WebSocket connections may delay full drain; scale this pattern if you add a hub shutdown hook.
+The server handles **SIGINT** and **SIGTERM** with a shared **30s** shutdown budget:
+
+1. The WebSocket hub enters draining mode and rejects new upgrades with **503**.
+2. Existing WebSocket clients receive close code **1012** (`service restart`) and reason `server shutting down`.
+3. The hub waits for client read loops and stops its goroutine, then the HTTP server completes graceful shutdown.
+
+Monitor `chatster_websocket_drain_duration_seconds`,
+`chatster_websocket_drain_clients_remaining`, and
+`chatster_websocket_drain_forced_closes_total`. A non-zero forced-close count means the
+process reached the deadline with at least one client loop still active; investigate
+network backpressure or a stuck handler before increasing the shutdown budget.
 
 ## Docker
 

@@ -17,6 +17,9 @@ const (
 	maxWebSocketReadBytes = 32 * 1024
 	outboundQueueSize     = 256
 	writeWait             = 10 * time.Second
+	shutdownCloseCode     = websocket.CloseServiceRestart
+	shutdownCloseReason   = "server shutting down"
+	shutdownCloseWait     = 250 * time.Millisecond
 	pongWait              = 60 * time.Second
 	pingPeriod            = (pongWait * 9) / 10
 )
@@ -96,6 +99,18 @@ func (c *Client) close() {
 	})
 }
 
+func (c *Client) closeForShutdown() {
+	if c.Conn != nil {
+		// WriteControl is safe alongside the single data writer and has its own short deadline.
+		_ = c.Conn.WriteControl(
+			websocket.CloseMessage,
+			websocket.FormatCloseMessage(shutdownCloseCode, shutdownCloseReason),
+			time.Now().Add(shutdownCloseWait),
+		)
+	}
+	c.close()
+}
+
 func (c *Client) allowMessage() bool {
 	return c.msgLimiter == nil || c.msgLimiter.Allow()
 }
@@ -121,6 +136,14 @@ func (c *Client) auditRejectedMessage(reason, content string) {
 func (c *Client) writeMessages() {
 	for {
 		select {
+		case <-c.done:
+			return
+		default:
+		}
+
+		select {
+		case <-c.done:
+			return
 		case message := <-c.send:
 			if err := c.writeJSON(message); err != nil {
 				metrics.WSOutboundDrops.WithLabelValues("write_error").Inc()
@@ -128,8 +151,6 @@ func (c *Client) writeMessages() {
 				c.close()
 				return
 			}
-		case <-c.done:
-			return
 		}
 	}
 }
@@ -159,7 +180,8 @@ func (c *Client) readMessages() {
 	defer func() {
 		close(done)
 		metrics.ConnectedClients.Dec()
-		c.Hub.unregister <- c
+		c.Hub.unregisterClient(c)
+		c.Hub.notifyClientFinished(c)
 		c.close()
 	}()
 
@@ -224,7 +246,9 @@ func (c *Client) readMessages() {
 		}
 
 		metrics.MessagesIngested.Inc()
-		c.Hub.broadcast <- msg
+		if !c.Hub.publish(msg) {
+			return
+		}
 	}
 }
 
