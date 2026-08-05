@@ -16,6 +16,7 @@ const sqliteBusyTimeoutMS = 5000
 const maxAuditPreviewRunes = 256
 
 const (
+	// DefaultRoom is the room used when a client does not select one.
 	DefaultRoom  = "general"
 	maxRoomRunes = 32
 )
