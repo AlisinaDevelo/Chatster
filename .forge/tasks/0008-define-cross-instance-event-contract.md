@@ -1,7 +1,7 @@
 ---
 id: 0008
 title: Define the cross-instance room event contract
-status: review
+status: done
 agent: architect
 model: opus
 depends_on: []
@@ -29,3 +29,4 @@ Research anchors: https://redis.io/docs/latest/develop/pubsub/ and https://redis
 - Added `docs/adr/0009-cross-instance-room-event-contract.md` and indexed it in `docs/adr/README.md`.
 - Added the dependency-free `backend/internal/events` envelope/channel contract and fixture-backed tests.
 - `go test -race ./internal/events` passes.
+- Full local checks and GitHub Actions run [31071923005](https://github.com/AlisinaDevelo/Chatster/actions/runs/31071923005) pass on commit `68b3b4b`.

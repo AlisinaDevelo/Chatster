@@ -1,7 +1,7 @@
 ---
 id: 0006
 title: Define the storage repository boundary for Postgres mode
-status: review
+status: done
 agent: architect
 model: opus
 depends_on: []
@@ -29,3 +29,4 @@ Research anchors: https://www.postgresql.org/docs/current/libpq-connect.html, ht
 - Added `docs/adr/0008-storage-repository-boundary.md` and indexed it in `docs/adr/README.md`.
 - Added deterministic `(timestamp, id)` history ordering and UTC persistence timestamps in the SQLite adapter.
 - `go test -race ./db` passes, including `TestGetRecentMessagesUsesIDForTimestampTies`.
+- Full local checks and GitHub Actions run [31071923005](https://github.com/AlisinaDevelo/Chatster/actions/runs/31071923005) pass on commit `68b3b4b`.
