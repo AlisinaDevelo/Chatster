@@ -219,12 +219,13 @@ func (db *DB) SaveMessageInRoom(room, username, content, msgType string) (*Messa
 
 	// Don't save system messages
 	if msgType == "username" {
+		now := time.Now().UTC()
 		return &Message{
 			Username:  username,
 			Content:   content,
 			Type:      msgType,
 			Room:      room,
-			Timestamp: time.Now(),
+			Timestamp: now,
 		}, nil
 	}
 
@@ -234,7 +235,7 @@ func (db *DB) SaveMessageInRoom(room, username, content, msgType string) (*Messa
 	}
 	defer func() { _ = stmt.Close() }()
 
-	now := time.Now()
+	now := time.Now().UTC()
 	result, err := stmt.Exec(room, username, content, msgType, now)
 	if err != nil {
 		return nil, err
@@ -285,7 +286,7 @@ func (db *DB) PruneModerationEventsBefore(cutoff time.Time) (int64, error) {
 func (db *DB) SaveModerationEvent(sessionID, username, reason, content string) (*ModerationEvent, error) {
 	contentPreview := truncateRunes(content, maxAuditPreviewRunes)
 	contentLength := utf8.RuneCountInString(content)
-	now := time.Now()
+	now := time.Now().UTC()
 
 	stmt, err := db.Prepare(`
 INSERT INTO moderation_audit_log(
@@ -334,7 +335,7 @@ func (db *DB) GetRecentMessagesInRoom(room string, limit int) ([]Message, error)
 		return nil, err
 	}
 
-	rows, err := db.Query("SELECT id, room, username, content, type, timestamp FROM messages WHERE room = ? ORDER BY timestamp DESC LIMIT ?", room, limit)
+	rows, err := db.Query("SELECT id, room, username, content, type, timestamp FROM messages WHERE room = ? ORDER BY timestamp DESC, id DESC LIMIT ?", room, limit)
 	if err != nil {
 		return nil, err
 	}

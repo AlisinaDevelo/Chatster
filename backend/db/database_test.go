@@ -202,6 +202,44 @@ func TestGetRecentMessagesOrder(t *testing.T) {
 	}
 }
 
+func TestGetRecentMessagesUsesIDForTimestampTies(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "tie-order.db")
+	database, err := Open(path)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	t.Cleanup(func() { _ = database.Close() })
+
+	first, err := database.SaveMessage("u", "first", "message")
+	if err != nil {
+		t.Fatalf("SaveMessage first: %v", err)
+	}
+	second, err := database.SaveMessage("u", "second", "message")
+	if err != nil {
+		t.Fatalf("SaveMessage second: %v", err)
+	}
+
+	if _, err := database.Exec(
+		"UPDATE messages SET timestamp = ? WHERE id IN (?, ?)",
+		"2026-01-01 00:00:00",
+		first.ID,
+		second.ID,
+	); err != nil {
+		t.Fatalf("set equal timestamps: %v", err)
+	}
+
+	messages, err := database.GetRecentMessages(10)
+	if err != nil {
+		t.Fatalf("GetRecentMessages: %v", err)
+	}
+	if len(messages) != 2 {
+		t.Fatalf("want 2 messages, got %d", len(messages))
+	}
+	if messages[0].ID != first.ID || messages[1].ID != second.ID {
+		t.Fatalf("equal-timestamp order: got IDs %d, %d want %d, %d", messages[0].ID, messages[1].ID, first.ID, second.ID)
+	}
+}
+
 func TestNormalizeRoom(t *testing.T) {
 	for _, test := range []struct {
 		name    string

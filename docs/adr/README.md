@@ -11,6 +11,8 @@ Short records of **why** Chatster is shaped the way it is. New significant decis
 | [0005](0005-broadcast-channel-and-writer-lock.md) | Buffered broadcast + per-client WS write lock |
 | [0006](0006-bounded-client-outbound-queues.md) | Bounded per-client outbound queues |
 | [0007](0007-websocket-drain-lifecycle.md) | Explicit WebSocket drain lifecycle on shutdown |
+| [0008](0008-storage-repository-boundary.md) | Storage repository boundary for Postgres mode |
+| [0009](0009-cross-instance-room-event-contract.md) | Cross-instance room event contract |
 
 ## Template
 

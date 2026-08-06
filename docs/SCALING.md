@@ -36,3 +36,7 @@ Chatster is intentionally a **single-process, single-node** reference. This docu
 - Infinite history at line-rate ingest.
 
 See [adr/README.md](adr/README.md) for decisions that keep the stack small.
+
+The reviewed scale-out contracts are [ADR 0008](adr/0008-storage-repository-boundary.md) for
+durable storage and [ADR 0009](adr/0009-cross-instance-room-event-contract.md) for live room
+fan-out. They are design contracts only; Postgres and Redis remain opt-in follow-up tasks.

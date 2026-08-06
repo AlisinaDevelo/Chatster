@@ -1,0 +1,14 @@
+{
+  "schema": "chatster.room-message",
+  "version": 1,
+  "event_id": "01JH7Q4ZK5N2R8S6T1V3W9X0Y4",
+  "room": "general",
+  "origin_instance": "instance-a",
+  "timestamp": "2026-08-06T10:00:00Z",
+  "message": {
+    "id": 42,
+    "username": "alice",
+    "content": "hello from the room",
+    "type": "message"
+  }
+}
