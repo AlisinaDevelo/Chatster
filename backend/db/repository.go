@@ -8,8 +8,11 @@ import (
 )
 
 const (
-	DefaultSQLitePath       = "./chatster.db"
+	// DefaultSQLitePath is the SQLite path used when no path is configured.
+	DefaultSQLitePath = "./chatster.db"
+	// DefaultPostgresMinConns is the default minimum Postgres pool size.
 	DefaultPostgresMinConns = int32(2)
+	// DefaultPostgresMaxConns is the default maximum Postgres pool size.
 	DefaultPostgresMaxConns = int32(10)
 )
 

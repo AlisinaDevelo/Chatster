@@ -175,6 +175,7 @@ func (db *PostgresDB) SaveMessageInRoom(room, username, content, msgType string)
 	return db.SaveMessageInRoomContext(context.Background(), room, username, content, msgType)
 }
 
+// SaveMessageInRoomContext saves a message for a validated room with a caller context.
 func (db *PostgresDB) SaveMessageInRoomContext(ctx context.Context, room, username, content, msgType string) (*Message, error) {
 	room, err := NormalizeRoom(room)
 	if err != nil {
@@ -205,10 +206,12 @@ RETURNING id, timestamp`, room, username, content, msgType).Scan(&message.ID, &m
 	return &message, nil
 }
 
+// PruneMessagesBefore deletes messages older than cutoff.
 func (db *PostgresDB) PruneMessagesBefore(cutoff time.Time) (int64, error) {
 	return db.PruneMessagesBeforeContext(context.Background(), cutoff)
 }
 
+// PruneMessagesBeforeContext deletes messages older than cutoff with a caller context.
 func (db *PostgresDB) PruneMessagesBeforeContext(ctx context.Context, cutoff time.Time) (int64, error) {
 	result, err := db.pool.Exec(ctx, "DELETE FROM messages WHERE timestamp < $1", cutoff.UTC())
 	if err != nil {
@@ -217,10 +220,12 @@ func (db *PostgresDB) PruneMessagesBeforeContext(ctx context.Context, cutoff tim
 	return result.RowsAffected(), nil
 }
 
+// PruneModerationEventsBefore deletes audit events older than cutoff.
 func (db *PostgresDB) PruneModerationEventsBefore(cutoff time.Time) (int64, error) {
 	return db.PruneModerationEventsBeforeContext(context.Background(), cutoff)
 }
 
+// PruneModerationEventsBeforeContext deletes audit events older than cutoff with a caller context.
 func (db *PostgresDB) PruneModerationEventsBeforeContext(ctx context.Context, cutoff time.Time) (int64, error) {
 	result, err := db.pool.Exec(ctx, "DELETE FROM moderation_audit_log WHERE timestamp < $1", cutoff.UTC())
 	if err != nil {
@@ -229,10 +234,12 @@ func (db *PostgresDB) PruneModerationEventsBeforeContext(ctx context.Context, cu
 	return result.RowsAffected(), nil
 }
 
+// SaveModerationEvent records a rejected input for abuse and debugging audits.
 func (db *PostgresDB) SaveModerationEvent(sessionID, username, reason, content string) (*ModerationEvent, error) {
 	return db.SaveModerationEventContext(context.Background(), sessionID, username, reason, content)
 }
 
+// SaveModerationEventContext records an audit event with a caller context.
 func (db *PostgresDB) SaveModerationEventContext(ctx context.Context, sessionID, username, reason, content string) (*ModerationEvent, error) {
 	event := ModerationEvent{
 		SessionID:      sessionID,
@@ -253,14 +260,17 @@ RETURNING id, timestamp`, event.SessionID, event.Username, event.Reason, event.C
 	return &event, nil
 }
 
+// GetRecentMessages returns recent messages from the default room.
 func (db *PostgresDB) GetRecentMessages(limit int) ([]Message, error) {
 	return db.GetRecentMessagesInRoom(DefaultRoom, limit)
 }
 
+// GetRecentMessagesInRoom returns recent messages for a validated room.
 func (db *PostgresDB) GetRecentMessagesInRoom(room string, limit int) ([]Message, error) {
 	return db.GetRecentMessagesInRoomContext(context.Background(), room, limit)
 }
 
+// GetRecentMessagesInRoomContext returns recent room messages with a caller context.
 func (db *PostgresDB) GetRecentMessagesInRoomContext(ctx context.Context, room string, limit int) ([]Message, error) {
 	room, err := NormalizeRoom(room)
 	if err != nil {
@@ -297,10 +307,12 @@ LIMIT $2`, room, limit)
 	return messages, nil
 }
 
+// PingContext checks Postgres health with a caller context.
 func (db *PostgresDB) PingContext(ctx context.Context) error {
 	return db.pool.Ping(ctx)
 }
 
+// Close releases the Postgres connection pool.
 func (db *PostgresDB) Close() error {
 	db.pool.Close()
 	return nil
