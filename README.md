@@ -1,6 +1,6 @@
 # Chatster
 
-Real-time chat reference stack: **Go** WebSocket hub + **SQLite** history, **React** client, single-service **Docker** production image, **CI** with lint and coverage, **Prometheus** metrics, and **portfolio-grade** docs (scaling, threat model, ADRs).
+Real-time chat reference stack: **Go** WebSocket hub + repository-backed history (**SQLite** by default, optional **Postgres**), **React** client, single-service **Docker** production image, **CI** with lint and coverage, **Prometheus** metrics, and **portfolio-grade** docs (scaling, threat model, ADRs).
 
 [![CI](https://github.com/AlisinaDevelo/Chatster/actions/workflows/ci.yml/badge.svg)](https://github.com/AlisinaDevelo/Chatster/actions/workflows/ci.yml)
 
@@ -13,7 +13,7 @@ Real-time chat reference stack: **Go** WebSocket hub + **SQLite** history, **Rea
 - WebSocket broadcast with reconnect, **buffered hub channel**, **bounded per-client outbound queues**, and safe gorilla/websocket write serialization.
 - Room-scoped chat and history, with `general` as the default and selectable `engineering` / `off-topic` rooms in the UI.
 - Last **50** messages replayed on connect per room; **SQLite timestamp** parsing supports multiple on-disk formats.
-- **`GET /health`** with SQLite ping (503 when degraded); **`GET /metrics`** for Prometheus.
+- **`GET /health`** with selected-storage ping (503 when degraded); **`GET /metrics`** for Prometheus.
 - **Abuse controls:** max username/message size (runes), per-IP **WebSocket upgrade** rate limit, per-client **message** rate limit, optional **`Origin`** allowlist.
 - Structured JSON logs (`slog`), graceful shutdown, GitHub Actions (lint, test + coverage artifact, WebSocket load smoke, ESLint, build, production image smoke), Dependabot, Docker Compose, single-service production image.
 - **Measured:** zero message loss with **p99 ≈ 6 ms** broadcast delivery at 25 concurrent clients, and zero loss at 50 (Apple M1, Go 1.26); reproducible harness and honest O(N²) fan-out scaling notes in [docs/LOAD_TESTING.md](docs/LOAD_TESTING.md).
@@ -100,7 +100,10 @@ The root Docker image and checked-in [`render.yaml`](render.yaml) are ready for 
 | Variable | Scope | Purpose |
 |----------|--------|---------|
 | `CHATSTER_HTTP_ADDR` | Backend | Listen address; if unset, use numeric `PORT` or default to `:8080`. |
-| `CHATSTER_DB_PATH` | Backend | SQLite file (default `./chatster.db`). |
+| `CHATSTER_STORAGE` | Backend | `sqlite` by default; set to `postgres` to opt into the pooled Postgres repository. Unknown values fail startup. |
+| `CHATSTER_DB_PATH` | Backend | SQLite file (default `./chatster.db`); used when storage is `sqlite`. |
+| `CHATSTER_POSTGRES_DSN` | Backend secret | Postgres connection string; required when storage is `postgres` and never logged. |
+| `CHATSTER_POSTGRES_MIN_CONNS` / `CHATSTER_POSTGRES_MAX_CONNS` | Backend | Postgres pool bounds (defaults `2` / `10`). |
 | `CHATSTER_STATIC_DIR` | Backend | Optional built frontend directory served by the Go backend. |
 | `CHATSTER_ALLOWED_ORIGINS` | Backend | Comma-separated `Origin` values for WebSocket; **empty = allow all** (dev only). |
 | `CHATSTER_WS_UPGRADE_RPS` | Backend | WS upgrades per IP per second (default `5`; `0` disables). |

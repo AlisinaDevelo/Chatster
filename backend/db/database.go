@@ -1,6 +1,7 @@
 package db
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"log"
@@ -212,6 +213,11 @@ func (db *DB) SaveMessage(username, content, msgType string) (*Message, error) {
 
 // SaveMessageInRoom saves a message to the database for a validated room.
 func (db *DB) SaveMessageInRoom(room, username, content, msgType string) (*Message, error) {
+	return db.SaveMessageInRoomContext(context.Background(), room, username, content, msgType)
+}
+
+// SaveMessageInRoomContext saves a message with a caller-controlled context.
+func (db *DB) SaveMessageInRoomContext(ctx context.Context, room, username, content, msgType string) (*Message, error) {
 	room, err := NormalizeRoom(room)
 	if err != nil {
 		return nil, err
@@ -229,14 +235,14 @@ func (db *DB) SaveMessageInRoom(room, username, content, msgType string) (*Messa
 		}, nil
 	}
 
-	stmt, err := db.Prepare("INSERT INTO messages(room, username, content, type, timestamp) VALUES(?, ?, ?, ?, ?)")
+	stmt, err := db.PrepareContext(ctx, "INSERT INTO messages(room, username, content, type, timestamp) VALUES(?, ?, ?, ?, ?)")
 	if err != nil {
 		return nil, err
 	}
 	defer func() { _ = stmt.Close() }()
 
 	now := time.Now().UTC()
-	result, err := stmt.Exec(room, username, content, msgType, now)
+	result, err := stmt.ExecContext(ctx, room, username, content, msgType, now)
 	if err != nil {
 		return nil, err
 	}
@@ -258,7 +264,12 @@ func (db *DB) SaveMessageInRoom(room, username, content, msgType string) (*Messa
 
 // PruneMessagesBefore deletes messages older than cutoff and returns the deleted row count.
 func (db *DB) PruneMessagesBefore(cutoff time.Time) (int64, error) {
-	result, err := db.Exec(
+	return db.PruneMessagesBeforeContext(context.Background(), cutoff)
+}
+
+// PruneMessagesBeforeContext deletes messages with a caller-controlled context.
+func (db *DB) PruneMessagesBeforeContext(ctx context.Context, cutoff time.Time) (int64, error) {
+	result, err := db.ExecContext(ctx,
 		"DELETE FROM messages WHERE julianday(timestamp) < julianday(?)",
 		cutoff.UTC().Format(time.RFC3339Nano),
 	)
@@ -271,7 +282,12 @@ func (db *DB) PruneMessagesBefore(cutoff time.Time) (int64, error) {
 
 // PruneModerationEventsBefore deletes audit events older than cutoff and returns the deleted row count.
 func (db *DB) PruneModerationEventsBefore(cutoff time.Time) (int64, error) {
-	result, err := db.Exec(
+	return db.PruneModerationEventsBeforeContext(context.Background(), cutoff)
+}
+
+// PruneModerationEventsBeforeContext deletes audit events with a caller-controlled context.
+func (db *DB) PruneModerationEventsBeforeContext(ctx context.Context, cutoff time.Time) (int64, error) {
+	result, err := db.ExecContext(ctx,
 		"DELETE FROM moderation_audit_log WHERE julianday(timestamp) < julianday(?)",
 		cutoff.UTC().Format(time.RFC3339Nano),
 	)
@@ -284,11 +300,16 @@ func (db *DB) PruneModerationEventsBefore(cutoff time.Time) (int64, error) {
 
 // SaveModerationEvent records a rejected message or username attempt.
 func (db *DB) SaveModerationEvent(sessionID, username, reason, content string) (*ModerationEvent, error) {
+	return db.SaveModerationEventContext(context.Background(), sessionID, username, reason, content)
+}
+
+// SaveModerationEventContext records an audit event with a caller-controlled context.
+func (db *DB) SaveModerationEventContext(ctx context.Context, sessionID, username, reason, content string) (*ModerationEvent, error) {
 	contentPreview := truncateRunes(content, maxAuditPreviewRunes)
 	contentLength := utf8.RuneCountInString(content)
 	now := time.Now().UTC()
 
-	stmt, err := db.Prepare(`
+	stmt, err := db.PrepareContext(ctx, `
 INSERT INTO moderation_audit_log(
 	session_id,
 	username,
@@ -302,7 +323,7 @@ INSERT INTO moderation_audit_log(
 	}
 	defer func() { _ = stmt.Close() }()
 
-	result, err := stmt.Exec(sessionID, username, reason, contentPreview, contentLength, now)
+	result, err := stmt.ExecContext(ctx, sessionID, username, reason, contentPreview, contentLength, now)
 	if err != nil {
 		return nil, err
 	}
@@ -330,12 +351,17 @@ func (db *DB) GetRecentMessages(limit int) ([]Message, error) {
 
 // GetRecentMessagesInRoom retrieves the most recent messages for a validated room.
 func (db *DB) GetRecentMessagesInRoom(room string, limit int) ([]Message, error) {
+	return db.GetRecentMessagesInRoomContext(context.Background(), room, limit)
+}
+
+// GetRecentMessagesInRoomContext retrieves history with a caller-controlled context.
+func (db *DB) GetRecentMessagesInRoomContext(ctx context.Context, room string, limit int) ([]Message, error) {
 	room, err := NormalizeRoom(room)
 	if err != nil {
 		return nil, err
 	}
 
-	rows, err := db.Query("SELECT id, room, username, content, type, timestamp FROM messages WHERE room = ? ORDER BY timestamp DESC, id DESC LIMIT ?", room, limit)
+	rows, err := db.QueryContext(ctx, "SELECT id, room, username, content, type, timestamp FROM messages WHERE room = ? ORDER BY timestamp DESC, id DESC LIMIT ?", room, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -351,7 +377,7 @@ func (db *DB) GetRecentMessagesInRoom(room string, limit int) ([]Message, error)
 
 		ts, err := parseMsgTimestamp(timestamp)
 		if err != nil {
-			msg.Timestamp = time.Now()
+			msg.Timestamp = time.Now().UTC()
 		} else {
 			msg.Timestamp = ts
 		}

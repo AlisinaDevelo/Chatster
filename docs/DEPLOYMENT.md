@@ -28,7 +28,8 @@ Then open:
 
 - Container runtime with WebSocket support.
 - Public HTTPS endpoint that forwards WebSocket upgrades.
-- Persistent writable disk mounted at `/data` for SQLite.
+- Persistent writable disk mounted at `/data` when using SQLite.
+- A managed Postgres instance and secret injection when using Postgres mode.
 - Health check path: `/health`.
 - Optional Prometheus scrape path: `/metrics`.
 
@@ -37,13 +38,38 @@ Then open:
 | Variable | Example | Why |
 |----------|---------|-----|
 | `CHATSTER_HTTP_ADDR` | `:8080` | Optional explicit listen address; unset uses the numeric `PORT` supplied by a hosting platform. |
-| `CHATSTER_DB_PATH` | `/data/chatster.db` | Keep SQLite on persistent storage. |
+| `CHATSTER_STORAGE` | `sqlite` | Select `sqlite` (default) or `postgres`; selection is explicit and has no fallback. |
+| `CHATSTER_DB_PATH` | `/data/chatster.db` | Keep SQLite on persistent storage; ignored by Postgres mode. |
+| `CHATSTER_POSTGRES_DSN` | `postgres://...?...` | Secret DSN required for Postgres mode; use `sslmode=verify-full` in production. |
+| `CHATSTER_POSTGRES_MIN_CONNS` / `CHATSTER_POSTGRES_MAX_CONNS` | `2` / `10` | Size the Postgres connection pool for the instance. |
 | `CHATSTER_STATIC_DIR` | `/app/static` | Already set by the production image. |
 | `CHATSTER_ALLOWED_ORIGINS` | `https://chatster.example.com` | Restrict browser WebSocket origins. |
 | `CHATSTER_WS_UPGRADE_RPS` | `5` | Per-IP upgrade abuse control. |
 | `CHATSTER_MESSAGE_RPS` | `5` | Per-client message abuse control. |
 | `CHATSTER_MESSAGE_RETENTION_DAYS` | `30` | Optional startup cleanup for old chat history. |
 | `CHATSTER_AUDIT_RETENTION_DAYS` | `90` | Optional startup cleanup for moderation audit history. |
+
+## Postgres mode
+
+Use Postgres when the service needs shared durable storage across instances or has outgrown
+SQLite’s single-file writer. Configure it with secret-managed environment variables:
+
+```text
+CHATSTER_STORAGE=postgres
+CHATSTER_POSTGRES_DSN=postgres://chatster:<secret>@<host>:5432/chatster?sslmode=verify-full
+CHATSTER_POSTGRES_MIN_CONNS=2
+CHATSTER_POSTGRES_MAX_CONNS=10
+```
+
+Chatster pings the pool and applies versioned migrations before it serves HTTP. A missing DSN,
+TLS/connectivity failure, invalid pool bounds, or migration error is fatal; the process does
+not silently fall back to SQLite. Use a trusted CA and verify the hostname. Keep the DSN out of
+`render.yaml`, image layers, logs, and committed `.env` files. Back up Postgres with managed
+PITR or a tested `pg_dump`/restore procedure.
+
+Postgres makes durable history shareable, but the WebSocket hub remains process-local. Multiple
+instances still need the Redis/event-fanout work described in [SCALING.md](SCALING.md) before
+clients on different instances can see the same live room broadcasts.
 
 ## Platform notes
 

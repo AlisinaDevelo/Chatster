@@ -77,6 +77,46 @@ jobs:
             backend/coverage-summary.txt
             backend/wsload-smoke.json
             backend/server-smoke.log
+            if-no-files-found: error
+
+  postgres:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: chatster
+          POSTGRES_PASSWORD: chatster
+          POSTGRES_DB: chatster
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U chatster -d chatster"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.22'
+          cache-dependency-path: backend/go.sum
+      - run: go mod download
+      - name: Run Postgres repository contract
+        env:
+          CHATSTER_POSTGRES_TEST_DSN: postgres://chatster:chatster@127.0.0.1:5432/chatster?sslmode=disable
+        run: go test -race -coverprofile=postgres-coverage.out ./db -run '^(TestRepositoryContractPostgres|TestPostgres)'
+      - name: Summarize Postgres coverage
+        run: go tool cover -func=postgres-coverage.out | tee postgres-coverage-summary.txt
+      - uses: actions/upload-artifact@v7
+        with:
+          name: postgres-repository-proof
+          path: |
+            backend/postgres-coverage.out
+            backend/postgres-coverage-summary.txt
           if-no-files-found: error
 
   frontend:

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"log/slog"
 	"strings"
 	"sync"
@@ -128,7 +129,9 @@ func (c *Client) sendRateLimitNotice() {
 }
 
 func (c *Client) auditRejectedMessage(reason, content string) {
-	if _, err := c.Hub.database.SaveModerationEvent(c.ID, c.username(), reason, content); err != nil {
+	ctx, cancel := context.WithTimeout(context.Background(), storageOperationTimeout)
+	defer cancel()
+	if _, err := c.Hub.database.SaveModerationEventContext(ctx, c.ID, c.username(), reason, content); err != nil {
 		slog.Warn("save moderation audit event", "err", err, "reason", reason, "session_id", c.ID)
 	}
 }

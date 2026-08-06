@@ -10,6 +10,9 @@ import (
 const (
 	defaultHTTPAddr             = ":8080"
 	defaultDBPath               = "./chatster.db"
+	defaultStorage              = "sqlite"
+	defaultPostgresMinConns     = int32(2)
+	defaultPostgresMaxConns     = int32(10)
 	defaultWSUpgradeRPS         = 5.0
 	defaultWSUpgradeBurst       = 10
 	defaultMessageRPS           = 5.0
@@ -22,6 +25,10 @@ const (
 type Config struct {
 	HTTPAddr                string
 	DBPath                  string
+	Storage                 string
+	PostgresDSN             string
+	PostgresMinConns        int32
+	PostgresMaxConns        int32
 	StaticDir               string
 	AllowedOrigins          []string
 	WSUpgradeRPS            float64
@@ -38,6 +45,10 @@ type Config struct {
 //
 // CHATSTER_HTTP_ADDR — listen address; if unset, use numeric PORT when available, otherwise ":8080".
 // CHATSTER_DB_PATH — SQLite file path (default "./chatster.db").
+// CHATSTER_STORAGE — storage backend: "sqlite" (default) or "postgres"; unknown values fail startup.
+// CHATSTER_POSTGRES_DSN — Postgres connection string, required when storage is "postgres"; never logged.
+// CHATSTER_POSTGRES_MIN_CONNS — Postgres pool minimum (default 2); invalid values fail startup in Postgres mode.
+// CHATSTER_POSTGRES_MAX_CONNS — Postgres pool maximum (default 10); invalid values fail startup in Postgres mode.
 // CHATSTER_STATIC_DIR — optional directory of built frontend assets to serve from the backend.
 // CHATSTER_ALLOWED_ORIGINS — comma-separated WebSocket Origin allowlist; empty = allow all (dev-friendly).
 // CHATSTER_WS_UPGRADE_RPS — max WS upgrades per IP per second (default 5); "0" disables limiting.
@@ -48,14 +59,18 @@ type Config struct {
 // CHATSTER_AUDIT_RETENTION_DAYS — delete moderation audit events older than this many days at startup (default 0 = disabled).
 func FromEnv() Config {
 	cfg := Config{
-		HTTPAddr:       strings.TrimSpace(os.Getenv("CHATSTER_HTTP_ADDR")),
-		DBPath:         strings.TrimSpace(os.Getenv("CHATSTER_DB_PATH")),
-		StaticDir:      strings.TrimSpace(os.Getenv("CHATSTER_STATIC_DIR")),
-		AllowedOrigins: splitCSV(os.Getenv("CHATSTER_ALLOWED_ORIGINS")),
-		WSUpgradeRPS:   defaultWSUpgradeRPS,
-		WSUpgradeBurst: defaultWSUpgradeBurst,
-		MessageRPS:     defaultMessageRPS,
-		MessageBurst:   defaultMessageBurst,
+		HTTPAddr:         strings.TrimSpace(os.Getenv("CHATSTER_HTTP_ADDR")),
+		DBPath:           strings.TrimSpace(os.Getenv("CHATSTER_DB_PATH")),
+		Storage:          strings.ToLower(strings.TrimSpace(os.Getenv("CHATSTER_STORAGE"))),
+		PostgresDSN:      strings.TrimSpace(os.Getenv("CHATSTER_POSTGRES_DSN")),
+		PostgresMinConns: parsePoolSizeEnv("CHATSTER_POSTGRES_MIN_CONNS", defaultPostgresMinConns),
+		PostgresMaxConns: parsePoolSizeEnv("CHATSTER_POSTGRES_MAX_CONNS", defaultPostgresMaxConns),
+		StaticDir:        strings.TrimSpace(os.Getenv("CHATSTER_STATIC_DIR")),
+		AllowedOrigins:   splitCSV(os.Getenv("CHATSTER_ALLOWED_ORIGINS")),
+		WSUpgradeRPS:     defaultWSUpgradeRPS,
+		WSUpgradeBurst:   defaultWSUpgradeBurst,
+		MessageRPS:       defaultMessageRPS,
+		MessageBurst:     defaultMessageBurst,
 	}
 
 	if cfg.HTTPAddr == "" {
@@ -63,6 +78,9 @@ func FromEnv() Config {
 	}
 	if cfg.DBPath == "" {
 		cfg.DBPath = defaultDBPath
+	}
+	if cfg.Storage == "" {
+		cfg.Storage = defaultStorage
 	}
 
 	if v := strings.TrimSpace(os.Getenv("CHATSTER_MESSAGE_RETENTION_DAYS")); v != "" {
@@ -120,6 +138,20 @@ func FromEnv() Config {
 	}
 
 	return cfg
+}
+
+// parsePoolSizeEnv preserves an invalid explicit value as -1 so Postgres mode can fail fast.
+func parsePoolSizeEnv(name string, defaultValue int32) int32 {
+	raw := strings.TrimSpace(os.Getenv(name))
+	if raw == "" {
+		return defaultValue
+	}
+
+	n, err := strconv.ParseInt(raw, 10, 32)
+	if err != nil || n < 1 {
+		return -1
+	}
+	return int32(n)
 }
 
 // platformHTTPAddr adapts the numeric PORT convention used by hosted web services.

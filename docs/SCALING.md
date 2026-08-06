@@ -18,7 +18,7 @@ Chatster is intentionally a **single-process, single-node** reference. This docu
    **Next steps:** shard the existing room-scoped hub by room; move to a **message bus** (Redis Pub/Sub, NATS, Kafka) so instances publish once; or use a dedicated real-time layer (managed WebSocket/Pusher-class service).
 
 2. **SQLite write throughput** — Every persisted message serializes on the DB file. **Symptoms:** `database is locked`, growing save latency, `/health` degrading under ping+write contention.  
-   **Next steps:** **Postgres** (or another server RDBMS) with connection pooling; batch writes; separate read replicas for history if reads dominate.
+   **Next steps:** use the implemented **Postgres** repository mode with connection pooling; then consider batch writes or separate read replicas for history if reads dominate.
 
 3. **Horizontal scaling of the API** — Multiple instances behind a load balancer each hold **different** in-memory client sets. **Symptoms:** users on instance A never see broadcasts from instance B.  
    **Next steps:** **sticky sessions** (same instance for WS) *plus* a **shared pub/sub** for cross-node broadcast, or a single shared connection gateway.
@@ -39,4 +39,5 @@ See [adr/README.md](adr/README.md) for decisions that keep the stack small.
 
 The reviewed scale-out contracts are [ADR 0008](adr/0008-storage-repository-boundary.md) for
 durable storage and [ADR 0009](adr/0009-cross-instance-room-event-contract.md) for live room
-fan-out. They are design contracts only; Postgres and Redis remain opt-in follow-up tasks.
+fan-out. Postgres storage is implemented and remains opt-in; Redis/event fan-out is the next
+requirement for live broadcasts across multiple instances.

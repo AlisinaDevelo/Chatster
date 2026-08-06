@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"time"
 	"unicode/utf8"
 
@@ -9,8 +10,9 @@ import (
 )
 
 const (
-	maxUsernameRunes = 64
-	maxMessageRunes  = 4000
+	maxUsernameRunes        = 64
+	maxMessageRunes         = 4000
+	storageOperationTimeout = 5 * time.Second
 )
 
 // Message represents a chat message.
@@ -37,13 +39,15 @@ func validMessageBody(s string) bool {
 	return utf8.RuneCountInString(s) <= maxMessageRunes
 }
 
-func saveMessageObserved(database *db.DB, username, content, msgType string) (*db.Message, error) {
+func saveMessageObserved(database db.Repository, username, content, msgType string) (*db.Message, error) {
 	return saveMessageObservedInRoom(database, db.DefaultRoom, username, content, msgType)
 }
 
-func saveMessageObservedInRoom(database *db.DB, room, username, content, msgType string) (*db.Message, error) {
+func saveMessageObservedInRoom(database db.Repository, room, username, content, msgType string) (*db.Message, error) {
 	started := time.Now()
-	msg, err := database.SaveMessageInRoom(room, username, content, msgType)
+	ctx, cancel := context.WithTimeout(context.Background(), storageOperationTimeout)
+	defer cancel()
+	msg, err := database.SaveMessageInRoomContext(ctx, room, username, content, msgType)
 	result := "ok"
 	if err != nil {
 		result = "error"

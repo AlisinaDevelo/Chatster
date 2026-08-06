@@ -22,8 +22,9 @@ The application will depend on a narrow repository contract. Concrete adapters o
 connection setup, migrations, and driver-specific error translation. Handlers, the hub, and
 retention startup code do not receive `*sql.DB`.
 
-The following is the contract sketch for the future `backend/storage` package. The exact
-package names may change during implementation, but the operations and semantics are fixed:
+The contract is implemented in the `backend/db` package. The interface below is a compact
+description of the operations and semantics; the concrete Go names also preserve compatibility
+helpers for the existing SQLite tests:
 
 ```go
 type Repository interface {
@@ -64,7 +65,7 @@ type StartupError struct {
 }
 ```
 
-`Open(ctx, config)` is the only construction path. It selects exactly one adapter, runs or
+`OpenRepository(ctx, config)` is the only application construction path. It selects exactly one adapter, runs or
 verifies its migrations, pings the backend, and returns a wrapped `StartupError` on failure.
 The error names the backend and operation, but never includes a password, full DSN, or secret
 environment value.
@@ -86,7 +87,7 @@ environment value.
 
 ### Configuration and failure behavior
 
-The future implementation will use explicit storage selection:
+The implementation uses explicit storage selection:
 
 | Variable | Contract |
 | --- | --- |
@@ -120,10 +121,10 @@ SQL against production.
 
 ### Contract-test strategy
 
-The storage package will expose a test-only factory shape that both adapters satisfy:
+The `db` package uses a test-only factory shape that both adapters satisfy:
 
 ```go
-type repositoryFactory func(t *testing.T) storage.Repository
+type repositoryFactory func(t *testing.T) db.Repository
 
 func TestRepositoryContract(t *testing.T, newRepository repositoryFactory) {
 	// Run the same cases for SQLite and Postgres.
@@ -147,16 +148,17 @@ driver-specific SQL plans.
 
 ## Consequences
 
-**Positive:** A future Postgres adapter can be added behind a stable seam; storage failures
-are explicit; room isolation, history ordering, audit semantics, and retention cannot drift
-between backends without failing the shared contract suite.
+**Positive:** The Postgres adapter sits behind a stable boundary; storage failures are explicit;
+room isolation, history ordering, audit semantics, and retention cannot drift between backends
+without failing the shared contract suite.
 
 **Negative:** The repository boundary adds a small translation layer and requires two migration
 sets. Postgres pooling, TLS, backups, and migration coordination become operational concerns
 when that mode is enabled.
 
-**Follow-up:** Issue [#25](https://github.com/AlisinaDevelo/Chatster/issues/25) implements the
-optional Postgres adapter only after this contract is reviewed and the shared tests exist.
+**Implementation:** Issue [#25](https://github.com/AlisinaDevelo/Chatster/issues/25) adds the
+optional Postgres adapter, context-aware repository boundary, shared contract tests, and the
+independent CI service job described here.
 
 ## References
 

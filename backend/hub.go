@@ -28,10 +28,10 @@ type Hub struct {
 	drainEvents  chan *Client
 	drainPending map[*Client]struct{}
 	finished     map[*Client]struct{}
-	database     *db.DB
+	database     db.Repository
 }
 
-func newHub(database *db.DB) *Hub {
+func newHub(database db.Repository) *Hub {
 	return &Hub{
 		clients: make(map[*Client]bool),
 		// Buffered so client read loops are not blocked while the hub writes to their socket (avoids deadlock).
@@ -283,7 +283,9 @@ func (h *Hub) drain(ctx context.Context) error {
 
 func (h *Hub) sendMessageHistory(client *Client) {
 	room := client.room()
-	messages, err := h.database.GetRecentMessagesInRoom(room, 50)
+	ctx, cancel := context.WithTimeout(context.Background(), storageOperationTimeout)
+	defer cancel()
+	messages, err := h.database.GetRecentMessagesInRoomContext(ctx, room, 50)
 	if err != nil {
 		slog.Warn("message history", "err", err)
 		return

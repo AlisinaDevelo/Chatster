@@ -8,7 +8,7 @@ How Chatster is instrumented today and how you would extend it toward **SLOs** a
 |--------|----------------|
 | **Logs** | Structured JSON via `log/slog` on stdout (keys suitable for log aggregation). |
 | **Metrics** | **Prometheus** exposition at **`GET /metrics`** (process + custom Chatster counters/gauges). |
-| **Health** | **`GET /health`** — liveness/readiness-style signal including SQLite ping. |
+| **Health** | **`GET /health`** — liveness/readiness-style signal including the selected repository ping. |
 
 ## Prometheus metrics (custom)
 
@@ -27,13 +27,13 @@ Namespaces and names follow `chatster_*` where applicable. Inspect `/metrics` on
 | `chatster_chat_messages_rejected_total{reason}` | Counter | Rejected chat inputs by reason: `invalid_username`, `invalid_body`, `rate_limited`. |
 | `chatster_chat_messages_pruned_total` | Counter | Persisted chat messages removed by the startup retention policy. |
 | `chatster_moderation_audit_events_pruned_total` | Counter | Moderation audit events removed by the startup retention policy. |
-| `chatster_chat_message_persist_duration_seconds{result}` | Histogram | SQLite persistence latency for accepted chat/system messages by `ok` / `error`. |
+| `chatster_chat_message_persist_duration_seconds{result}` | Histogram | Persistence latency for accepted chat/system messages by `ok` / `error`, across the selected repository. |
 | `chatster_websocket_broadcast_fanout_duration_seconds` | Histogram | Hub fanout enqueue latency for each broadcast message. |
 
 Import [grafana/chatster-dashboard.json](grafana/chatster-dashboard.json) into Grafana with a Prometheus datasource to view:
 
 - **Traffic:** connected clients, message ingest rate, upgrade rate.
-- **Latency:** p95 SQLite persist latency and p99 broadcast fanout latency.
+- **Latency:** p95 repository persist latency and p99 broadcast fanout latency.
 - **Errors/abuse:** rejected messages by reason and outbound drops by reason.
 
 Useful PromQL snippets:
@@ -78,7 +78,7 @@ Why not bundled here: OTel pulls a larger dependency tree and exporter configura
 
 1. Initialize a `TracerProvider` in `main` with resource attributes (`service.name=chatster`).
 2. Instrument HTTP mux with `otelhttp` middleware (upgrade routes need careful testing).
-3. Use `otel` SQLite wrapper or manual spans in `db` package for query latency.
+3. Use database-specific OTel instrumentation or manual spans in the `db` package for query latency.
 
 ## Secrets
 

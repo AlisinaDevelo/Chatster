@@ -7,7 +7,11 @@ Runbook-style notes for operating Chatster beyond local development.
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `CHATSTER_HTTP_ADDR` | `PORT` or `:8080` | HTTP listen address; numeric `PORT` is used when this is unset |
+| `CHATSTER_STORAGE` | `sqlite` | Storage backend; `postgres` opts into the pooled Postgres adapter and unknown values fail startup |
 | `CHATSTER_DB_PATH` | `./chatster.db` | SQLite database file path |
+| `CHATSTER_POSTGRES_DSN` | _(required in Postgres mode)_ | Secret Postgres connection string; never logged |
+| `CHATSTER_POSTGRES_MIN_CONNS` | `2` | Postgres pool minimum; positive values only |
+| `CHATSTER_POSTGRES_MAX_CONNS` | `10` | Postgres pool maximum; must be at least the minimum |
 | `CHATSTER_STATIC_DIR` | _(empty)_ | Optional built frontend directory served by the Go backend |
 | `CHATSTER_ALLOWED_ORIGINS` | _(empty)_ | Comma-separated WebSocket `Origin` values; empty allows all origins |
 | `CHATSTER_WS_UPGRADE_RPS` | `5` | Per-IP WebSocket upgrades per second (`0` disables) |
@@ -16,6 +20,28 @@ Runbook-style notes for operating Chatster beyond local development.
 | `CHATSTER_MESSAGE_BURST` | `10` | Burst size for the message limiter |
 | `CHATSTER_MESSAGE_RETENTION_DAYS` | `0` | Delete persisted messages older than this many days at startup (`0` disables) |
 | `CHATSTER_AUDIT_RETENTION_DAYS` | `0` | Delete moderation audit events older than this many days at startup (`0` disables) |
+
+## Storage modes
+
+SQLite remains the default for local development, Docker Compose, and the checked-in Render
+Blueprint. Keep `CHATSTER_DB_PATH` on a persistent volume in any environment where history
+must survive a restart or redeploy.
+
+Postgres is explicit and has no fallback:
+
+```bash
+CHATSTER_STORAGE=postgres \
+CHATSTER_POSTGRES_DSN='postgres://chatster:${CHATSTER_POSTGRES_PASSWORD}@db.example.com:5432/chatster?sslmode=verify-full' \
+CHATSTER_POSTGRES_MIN_CONNS=2 \
+CHATSTER_POSTGRES_MAX_CONNS=10 \
+go run .
+```
+
+The process fails before serving traffic when the DSN is missing, the pool bounds are invalid,
+the initial ping fails, or migrations fail. It never creates a replacement SQLite database.
+Production Postgres connections should use `sslmode=verify-full` with a trusted CA and a
+secret manager or environment injection for credentials. `sslmode=disable` is for local CI or
+development only.
 
 ## Health checks
 
@@ -88,17 +114,26 @@ docker run --rm \
 
 ## Persistence
 
-Startup applies ordered SQLite migrations and records them in `schema_migrations`. Check that ledger before serving real traffic after a schema change.
+Startup applies ordered migrations for the selected backend and records them in
+`schema_migrations`. SQLite applies them on its single connection; Postgres takes a database
+advisory lock while applying each version. Check the migration ledger before serving real
+traffic after a schema change.
 
-When `CHATSTER_MESSAGE_RETENTION_DAYS` is positive, startup deletes older rows from `messages`, logs the deleted count, and increments `chatster_chat_messages_pruned_total`. When `CHATSTER_AUDIT_RETENTION_DAYS` is positive, the same lifecycle applies to `moderation_audit_log` and `chatster_moderation_audit_events_pruned_total`. The cleanup is intentionally startup-based so it remains simple and predictable for the single-node SQLite deployment.
+When `CHATSTER_MESSAGE_RETENTION_DAYS` is positive, startup deletes older rows from `messages`, logs the deleted count, and increments `chatster_chat_messages_pruned_total`. When `CHATSTER_AUDIT_RETENTION_DAYS` is positive, the same lifecycle applies to `moderation_audit_log` and `chatster_moderation_audit_events_pruned_total`. The cleanup is startup-based and runs against whichever repository is selected.
 
 ## Backups
 
 Copy the SQLite file while the process is stopped, or use SQLite’s backup API / `.backup` for online copies if you extend the service.
 
+For Postgres, use the platform’s managed backup/PITR facility or a tested `pg_dump`/restore
+process. Migrations are forward-only and startup-owned; verify the target backup by restoring
+it into a disposable database before a production rollback.
+
 ## Production hardening (checklist)
 
 - Terminate TLS at the edge; use **`wss://`** for WebSockets.
+- For Postgres, require TLS hostname verification (`sslmode=verify-full`) and keep the CA,
+  username, and password outside committed files and logs.
 - Set **`CHATSTER_ALLOWED_ORIGINS`** to match your static app origins (see [THREAT_MODEL.md](THREAT_MODEL.md)).
 - Run the API as a non-root user (Dockerfile already uses a dedicated user).
 - Monitor `/health`, **`/metrics`**, log volume, and DB disk growth.

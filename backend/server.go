@@ -102,7 +102,7 @@ func serveWs(hub *Hub, cfg config.Config, up websocket.Upgrader, wsRL *ratelimit
 	go client.readMessages()
 }
 
-func healthHandler(database *db.DB) http.HandlerFunc {
+func healthHandler(database db.Repository) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 		defer cancel()
@@ -129,7 +129,7 @@ func healthHandler(database *db.DB) http.HandlerFunc {
 	}
 }
 
-func messagesHandler(database *db.DB) http.HandlerFunc {
+func messagesHandler(database db.Repository) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -155,7 +155,7 @@ func messagesHandler(database *db.DB) http.HandlerFunc {
 			}
 		}
 
-		messages, err := database.GetRecentMessagesInRoom(room, limit)
+		messages, err := database.GetRecentMessagesInRoomContext(r.Context(), room, limit)
 		if err != nil {
 			slog.Warn("list message history", "err", err)
 			http.Error(w, "message history unavailable", http.StatusInternalServerError)
@@ -210,7 +210,7 @@ func staticHandler(staticDir string) http.Handler {
 	})
 }
 
-func mount(cfg config.Config, hub *Hub, database *db.DB) http.Handler {
+func mount(cfg config.Config, hub *Hub, database db.Repository) http.Handler {
 	r := mux.NewRouter()
 	up := newUpgrader()
 

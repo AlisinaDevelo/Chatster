@@ -10,6 +10,10 @@ func TestFromEnvDefaults(t *testing.T) {
 	t.Setenv("CHATSTER_HTTP_ADDR", "")
 	t.Setenv("PORT", "")
 	t.Setenv("CHATSTER_DB_PATH", "")
+	t.Setenv("CHATSTER_STORAGE", "")
+	t.Setenv("CHATSTER_POSTGRES_DSN", "")
+	t.Setenv("CHATSTER_POSTGRES_MIN_CONNS", "")
+	t.Setenv("CHATSTER_POSTGRES_MAX_CONNS", "")
 	t.Setenv("CHATSTER_STATIC_DIR", "")
 	t.Setenv("CHATSTER_ALLOWED_ORIGINS", "")
 	t.Setenv("CHATSTER_MESSAGE_RETENTION_DAYS", "")
@@ -22,6 +26,12 @@ func TestFromEnvDefaults(t *testing.T) {
 	}
 	if cfg.DBPath != defaultDBPath {
 		t.Fatalf("DBPath: got %q want %q", cfg.DBPath, defaultDBPath)
+	}
+	if cfg.Storage != defaultStorage {
+		t.Fatalf("Storage: got %q want %q", cfg.Storage, defaultStorage)
+	}
+	if cfg.PostgresMinConns != defaultPostgresMinConns || cfg.PostgresMaxConns != defaultPostgresMaxConns {
+		t.Fatalf("Postgres pool defaults: min=%d max=%d", cfg.PostgresMinConns, cfg.PostgresMaxConns)
 	}
 	if cfg.StaticDir != "" {
 		t.Fatalf("StaticDir: got %q want empty", cfg.StaticDir)
@@ -68,6 +78,10 @@ func TestFromEnvOverride(t *testing.T) {
 	t.Setenv("CHATSTER_HTTP_ADDR", ":9999")
 	t.Setenv("PORT", "10000")
 	t.Setenv("CHATSTER_DB_PATH", "/tmp/x.db")
+	t.Setenv("CHATSTER_STORAGE", " POSTGRES ")
+	t.Setenv("CHATSTER_POSTGRES_DSN", " postgres://chatster:secret@db/chatster ")
+	t.Setenv("CHATSTER_POSTGRES_MIN_CONNS", "3")
+	t.Setenv("CHATSTER_POSTGRES_MAX_CONNS", "12")
 	t.Setenv("CHATSTER_STATIC_DIR", "/app/static")
 	t.Setenv("CHATSTER_ALLOWED_ORIGINS", " https://a.test , https://b.test ")
 	t.Setenv("CHATSTER_MESSAGE_RETENTION_DAYS", "30")
@@ -79,6 +93,12 @@ func TestFromEnvOverride(t *testing.T) {
 	cfg := FromEnv()
 	if cfg.HTTPAddr != ":9999" || cfg.DBPath != "/tmp/x.db" {
 		t.Fatalf("unexpected cfg: %+v", cfg)
+	}
+	if cfg.Storage != "postgres" || cfg.PostgresDSN != "postgres://chatster:secret@db/chatster" {
+		t.Fatalf("storage config: %+v", cfg)
+	}
+	if cfg.PostgresMinConns != 3 || cfg.PostgresMaxConns != 12 {
+		t.Fatalf("Postgres pool: min=%d max=%d", cfg.PostgresMinConns, cfg.PostgresMaxConns)
 	}
 	if cfg.StaticDir != "/app/static" {
 		t.Fatalf("StaticDir: got %q want /app/static", cfg.StaticDir)
@@ -97,6 +117,26 @@ func TestFromEnvOverride(t *testing.T) {
 	}
 	if cfg.MessageRPS != 8 || cfg.MessageBurst != 4 {
 		t.Fatalf("message rate: rps=%v burst=%v", cfg.MessageRPS, cfg.MessageBurst)
+	}
+}
+
+func TestFromEnvPreservesInvalidPostgresPoolValues(t *testing.T) {
+	t.Setenv("CHATSTER_POSTGRES_MIN_CONNS", "0")
+	cfg := FromEnv()
+	if cfg.PostgresMinConns != -1 {
+		t.Fatalf("invalid minimum: got %d want -1", cfg.PostgresMinConns)
+	}
+
+	t.Setenv("CHATSTER_POSTGRES_MAX_CONNS", "not-a-number")
+	cfg = FromEnv()
+	if cfg.PostgresMaxConns != -1 {
+		t.Fatalf("invalid maximum: got %d want -1", cfg.PostgresMaxConns)
+	}
+
+	t.Setenv("CHATSTER_POSTGRES_MAX_CONNS", "0")
+	cfg = FromEnv()
+	if cfg.PostgresMaxConns != -1 {
+		t.Fatalf("zero maximum: got %d want -1", cfg.PostgresMaxConns)
 	}
 }
 

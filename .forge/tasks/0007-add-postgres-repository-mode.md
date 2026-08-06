@@ -1,7 +1,7 @@
 ---
 id: 0007
 title: Add an optional Postgres repository mode
-status: backlog
+status: in-progress
 agent: backend-specialist
 model: sonnet
 depends_on: [0006]

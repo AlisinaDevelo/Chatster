@@ -19,16 +19,27 @@ func main() {
 
 	cfg := config.FromEnv()
 
-	database, err := db.Open(cfg.DBPath)
+	startupCtx, cancelStartup := context.WithTimeout(context.Background(), 30*time.Second)
+	repository, err := db.OpenRepository(startupCtx, db.StorageConfig{
+		Storage:          cfg.Storage,
+		SQLitePath:       cfg.DBPath,
+		PostgresDSN:      cfg.PostgresDSN,
+		PostgresMinConns: cfg.PostgresMinConns,
+		PostgresMaxConns: cfg.PostgresMaxConns,
+	})
+	cancelStartup()
 	if err != nil {
-		slog.Error("database init failed", "err", err)
+		slog.Error("storage init failed", "err", err, "storage", cfg.Storage)
 		os.Exit(1)
 	}
-	defer func() { _ = database.Close() }()
+	defer func() { _ = repository.Close() }()
+
+	retentionCtx, cancelRetention := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancelRetention()
 
 	if cfg.MessageRetentionDays > 0 {
 		cutoff := time.Now().UTC().AddDate(0, 0, -cfg.MessageRetentionDays)
-		deleted, err := database.PruneMessagesBefore(cutoff)
+		deleted, err := repository.PruneMessagesBeforeContext(retentionCtx, cutoff)
 		if err != nil {
 			slog.Error("message retention cleanup failed", "err", err, "retention_days", cfg.MessageRetentionDays)
 			os.Exit(1)
@@ -39,7 +50,7 @@ func main() {
 
 	if cfg.AuditRetentionDays > 0 {
 		cutoff := time.Now().UTC().AddDate(0, 0, -cfg.AuditRetentionDays)
-		deleted, err := database.PruneModerationEventsBefore(cutoff)
+		deleted, err := repository.PruneModerationEventsBeforeContext(retentionCtx, cutoff)
 		if err != nil {
 			slog.Error("moderation audit retention cleanup failed", "err", err, "retention_days", cfg.AuditRetentionDays)
 			os.Exit(1)
@@ -48,10 +59,10 @@ func main() {
 		slog.Info("moderation audit retention cleanup", "deleted_events", deleted, "retention_days", cfg.AuditRetentionDays)
 	}
 
-	hub := newHub(database)
+	hub := newHub(repository)
 	go hub.run()
 
-	handler := mount(cfg, hub, database)
+	handler := mount(cfg, hub, repository)
 
 	srv := &http.Server{
 		Addr:    cfg.HTTPAddr,
@@ -59,7 +70,7 @@ func main() {
 	}
 
 	go func() {
-		slog.Info("server starting", "addr", cfg.HTTPAddr, "db", cfg.DBPath)
+		slog.Info("server starting", "addr", cfg.HTTPAddr, "storage", cfg.Storage)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			slog.Error("listen", "err", err)
 			os.Exit(1)

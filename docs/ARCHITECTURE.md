@@ -1,6 +1,6 @@
 # Architecture
 
-Chatster is a small full-stack demo: a **Go** HTTP server with a room-scoped **WebSocket** hub, **SQLite** persistence, and a **React** single-page client. The default room is `general`; the frontend currently offers `general`, `engineering`, and `off-topic`.
+Chatster is a small full-stack demo: a **Go** HTTP server with a room-scoped **WebSocket** hub, repository-backed persistence (**SQLite** by default, optional **Postgres**), and a **React** single-page client. The default room is `general`; the frontend currently offers `general`, `engineering`, and `off-topic`.
 
 ## Components
 
@@ -13,7 +13,7 @@ flowchart LR
   subgraph server [Go server]
     Mux[Gorilla Mux]
     Hub[Hub goroutine]
-    DB[(SQLite)]
+    DB[(SQLite / Postgres)]
     Prom[Prometheus /metrics]
   end
   UI --> WSClient
@@ -28,10 +28,10 @@ flowchart LR
 ### Backend (`backend/`)
 
 - **`main.go`**: HTTP server with **graceful shutdown**, explicit WebSocket hub draining, **`log/slog`** JSON logs, routes, room-aware WebSocket upgrade (`/ws?room=...`), CORS, **Prometheus `/metrics`**, and the **hub** (`Hub.run`) that manages client lifecycle and broadcasts JSON within a room.
-- **`internal/config`**: `CHATSTER_*` environment variables (listen address, DB path, **Origin allowlist**, **WS upgrade and message rate limits**).
+- **`internal/config`**: `CHATSTER_*` environment variables (listen address, storage selection and pool settings, **Origin allowlist**, **WS upgrade and message rate limits**).
 - **`internal/metrics`**: Prometheus metric definitions (`chatster_*`).
 - **`internal/ratelimit`**: Per-IP token bucket for WebSocket **upgrade** attempts.
-- **`db/`**: SQLite — ordered schema migrations (`schema_migrations` ledger), room-scoped `messages` table, `SaveMessageInRoom`, `GetRecentMessagesInRoom`, and **flexible timestamp parsing** (RFC3339 and legacy layouts).
+- **`db/`**: the storage repository boundary, with ordered SQLite migrations, an optional `pgxpool` Postgres adapter, room-scoped history, moderation audit persistence, retention, and health checks. SQLite retains **flexible timestamp parsing** for legacy rows.
 
 **Message flow**
 
@@ -48,7 +48,7 @@ sequenceDiagram
   actor User
   participant WS as WebSocket client
   participant Hub as Hub goroutine
-  participant DB as SQLite
+  participant DB as Repository
   participant Peers as Other clients
 
   User->>WS: open GET /ws?room=engineering
@@ -101,7 +101,7 @@ stateDiagram-v2
 
 **Operational endpoints**
 
-- `GET /health` — JSON `status` / `database` / `service`; **503** when SQLite ping fails ([OPERATIONS.md](OPERATIONS.md)).
+- `GET /health` — JSON `status` / `database` / `service`; **503** when the selected repository ping fails ([OPERATIONS.md](OPERATIONS.md)).
 - `GET /metrics` — Prometheus exposition ([OBSERVABILITY.md](OBSERVABILITY.md)).
 - `GET /` — plain-text banner.
 
@@ -113,8 +113,10 @@ stateDiagram-v2
 
 ### Data model
 
-SQLite is migrated forward by an ordered `schema_migrations` ledger; chat rows live in
-`messages`. The handshake username message is the only payload not stored as a row.
+The selected repository is migrated forward by an ordered `schema_migrations` ledger; chat
+rows live in `messages`. The handshake username message is the only payload not stored as a
+row. Postgres migrations take a database advisory lock so concurrent replicas do not apply
+the same version twice.
 
 ```mermaid
 erDiagram
@@ -138,7 +140,10 @@ erDiagram
 | Variable | Where | Purpose |
 |----------|--------|---------|
 | `CHATSTER_HTTP_ADDR` | Backend | Listen address; if unset, use numeric `PORT` or default to `:8080`. |
-| `CHATSTER_DB_PATH` | Backend | SQLite file path (default `./chatster.db`). |
+| `CHATSTER_STORAGE` | Backend | `sqlite` by default; `postgres` selects the pooled Postgres repository. |
+| `CHATSTER_DB_PATH` | Backend | SQLite file path (default `./chatster.db`), used only for SQLite. |
+| `CHATSTER_POSTGRES_DSN` | Backend secret | Required for Postgres; never logged. |
+| `CHATSTER_POSTGRES_MIN_CONNS` / `CHATSTER_POSTGRES_MAX_CONNS` | Backend | Postgres pool bounds (defaults `2` / `10`). |
 | `CHATSTER_ALLOWED_ORIGINS` | Backend | Comma-separated `Origin` allowlist; **empty = allow all** (dev). |
 | `CHATSTER_WS_UPGRADE_RPS` / `CHATSTER_WS_UPGRADE_BURST` | Backend | Per-IP WebSocket upgrade limiter (`RPS=0` disables). |
 | `CHATSTER_MESSAGE_RPS` / `CHATSTER_MESSAGE_BURST` | Backend | Per-client chat message limiter (`RPS=0` disables). |
