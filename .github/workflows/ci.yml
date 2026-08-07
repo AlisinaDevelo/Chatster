@@ -182,11 +182,11 @@ jobs:
           done
 
           curl -fsS http://127.0.0.1:18081/health
-          curl -fsS http://127.0.0.1:18081/ | grep -q "Chatster"
-          curl -fsS http://127.0.0.1:18081/rooms/general | grep -q "Chatster"
-          curl -fsS http://127.0.0.1:18081/rooms/engineering | grep -q "Chatster"
-          curl -fsS "http://127.0.0.1:18081/api/messages?limit=1&room=engineering" | grep -q '"messages":\[\]'
-          curl -fsS http://127.0.0.1:18081/metrics | grep -q "chatster_"
+          grep -Fq "Chatster" <<<"$(curl -fsS http://127.0.0.1:18081/)"
+          grep -Fq "Chatster" <<<"$(curl -fsS http://127.0.0.1:18081/rooms/general)"
+          grep -Fq "Chatster" <<<"$(curl -fsS http://127.0.0.1:18081/rooms/engineering)"
+          grep -Fq '"messages":[]' <<<"$(curl -fsS "http://127.0.0.1:18081/api/messages?limit=1&room=engineering")"
+          grep -Fq "chatster_" <<<"$(curl -fsS http://127.0.0.1:18081/metrics)"
 
           docker stop chatster-prod-smoke
           trap - EXIT
