@@ -14,7 +14,7 @@ GitHub is the task source of truth; the Markdown files in this directory are the
 | 0008 | [#26](https://github.com/AlisinaDevelo/Chatster/issues/26) | Define the cross-instance room event contract | ready | next | - |
 | 0009 | [#27](https://github.com/AlisinaDevelo/Chatster/issues/27) | Add an optional Redis room fan-out adapter | backlog | later | 0008 |
 | 0010 | [#28](https://github.com/AlisinaDevelo/Chatster/issues/28) | Bind authenticated identity to sessions and room authorization | backlog | later | - |
-| 0011 | [#29](https://github.com/AlisinaDevelo/Chatster/issues/29) | Virtualize long room history without losing accessibility | backlog | later | - |
+| 0011 | [#29](https://github.com/AlisinaDevelo/Chatster/issues/29) | Virtualize long room history without losing accessibility | done | later | - |
 
 Run the managed ledger from the repository root:
 

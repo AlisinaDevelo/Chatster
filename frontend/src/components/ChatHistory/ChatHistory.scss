@@ -101,6 +101,12 @@
   }
 }
 
+.messages-virtual-content {
+  position: relative;
+  width: 100%;
+  min-height: 100%;
+}
+
 .message-container {
   margin-bottom: 14px;
   animation: msg-in 0.35s ease-out both;
@@ -136,6 +142,10 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .messages {
+    scroll-behavior: auto;
+  }
+
   .message-container {
     animation: none;
   }
