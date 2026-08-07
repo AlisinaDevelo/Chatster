@@ -12,12 +12,29 @@ import (
 	"github.com/AliSinaDevelo/Chatster/db"
 	"github.com/AliSinaDevelo/Chatster/internal/config"
 	"github.com/AliSinaDevelo/Chatster/internal/metrics"
+	"github.com/AliSinaDevelo/Chatster/internal/telemetry"
 )
 
 func main() {
 	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo})))
 
 	cfg := config.FromEnv()
+
+	shutdownTelemetry, telemetryEnabled, err := telemetry.Setup(context.Background())
+	if err != nil {
+		slog.Error("telemetry init failed", "err", err)
+		os.Exit(1)
+	}
+	defer func() {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := shutdownTelemetry(shutdownCtx); err != nil {
+			slog.Warn("telemetry shutdown", "err", err)
+		}
+	}()
+	if telemetryEnabled {
+		slog.Info("telemetry tracing enabled")
+	}
 
 	startupCtx, cancelStartup := context.WithTimeout(context.Background(), 30*time.Second)
 	repository, err := db.OpenRepository(startupCtx, db.StorageConfig{

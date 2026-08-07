@@ -18,9 +18,12 @@ import (
 	"github.com/AliSinaDevelo/Chatster/internal/config"
 	"github.com/AliSinaDevelo/Chatster/internal/metrics"
 	"github.com/AliSinaDevelo/Chatster/internal/ratelimit"
+	"github.com/AliSinaDevelo/Chatster/internal/telemetry"
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/propagation"
 )
 
 func newUpgrader() websocket.Upgrader {
@@ -49,12 +52,25 @@ func newSessionID() string {
 }
 
 func serveWs(hub *Hub, cfg config.Config, up websocket.Upgrader, wsRL *ratelimit.WSUpgrade, w http.ResponseWriter, r *http.Request) {
+	// The HTTP request context is canceled after Upgrade returns. Preserve its
+	// trace values without carrying that cancellation into the socket lifetime.
+	traceCtx, traceSpan := telemetry.Start(context.WithoutCancel(r.Context()), "chatster.websocket.session")
+	traceTransferred := false
+	defer func() {
+		if !traceTransferred {
+			traceSpan.End()
+		}
+	}()
+
 	room, err := db.NormalizeRoom(r.URL.Query().Get("room"))
 	if err != nil {
+		traceSpan.SetAttributes(attribute.String("chatster.websocket.result", "invalid_room"))
 		http.Error(w, "invalid room", http.StatusBadRequest)
 		return
 	}
+	traceSpan.SetAttributes(attribute.String("chatster.room", room))
 	if hub.isDraining() {
+		traceSpan.SetAttributes(attribute.String("chatster.websocket.result", "draining"))
 		metrics.WSUpgrades.WithLabelValues("draining").Inc()
 		http.Error(w, "server shutting down", http.StatusServiceUnavailable)
 		return
@@ -62,11 +78,13 @@ func serveWs(hub *Hub, cfg config.Config, up websocket.Upgrader, wsRL *ratelimit
 
 	ip := clientIP(r)
 	if wsRL != nil && !wsRL.Allow(ip) {
+		traceSpan.SetAttributes(attribute.String("chatster.websocket.result", "rate_limited"))
 		metrics.WSUpgrades.WithLabelValues("rate_limited").Inc()
 		http.Error(w, "too many connections", http.StatusTooManyRequests)
 		return
 	}
 	if !cfg.OriginAllowed(r) {
+		traceSpan.SetAttributes(attribute.String("chatster.websocket.result", "denied_origin"))
 		metrics.WSUpgrades.WithLabelValues("denied_origin").Inc()
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
@@ -74,10 +92,13 @@ func serveWs(hub *Hub, cfg config.Config, up websocket.Upgrader, wsRL *ratelimit
 
 	conn, err := up.Upgrade(w, r, nil)
 	if err != nil {
+		telemetry.MarkError(traceSpan)
+		traceSpan.SetAttributes(attribute.String("chatster.websocket.result", "upgrade_error"))
 		metrics.WSUpgrades.WithLabelValues("upgrade_error").Inc()
 		slog.Warn("ws upgrade", "err", err)
 		return
 	}
+	traceSpan.SetAttributes(attribute.String("chatster.websocket.result", "accepted"))
 	metrics.WSUpgrades.WithLabelValues("ok").Inc()
 
 	client := &Client{
@@ -89,15 +110,19 @@ func serveWs(hub *Hub, cfg config.Config, up websocket.Upgrader, wsRL *ratelimit
 		msgLimiter: newMessageLimiter(cfg),
 		send:       make(chan Message, outboundQueueSize),
 		done:       make(chan struct{}),
+		traceCtx:   traceCtx,
+		traceSpan:  traceSpan,
 	}
 
 	go client.writeMessages()
 	if !hub.registerClient(client) {
+		traceSpan.SetAttributes(attribute.String("chatster.websocket.result", "draining"))
 		metrics.WSUpgrades.WithLabelValues("draining").Inc()
 		client.closeForShutdown()
 		return
 	}
 	metrics.ConnectedClients.Inc()
+	traceTransferred = true
 
 	go client.readMessages()
 }
@@ -106,8 +131,13 @@ func healthHandler(database db.Repository) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 		defer cancel()
+		ctx, span := telemetry.Start(ctx, "chatster.storage.ping", attribute.String("chatster.storage.operation", "ping"))
+		defer span.End()
 
 		dbOK := database.PingContext(ctx) == nil
+		if !dbOK {
+			telemetry.MarkError(span)
+		}
 		status := "ok"
 		code := http.StatusOK
 		if !dbOK {
@@ -155,8 +185,16 @@ func messagesHandler(database db.Repository) http.HandlerFunc {
 			}
 		}
 
-		messages, err := database.GetRecentMessagesInRoomContext(r.Context(), room, limit)
+		ctx, span := telemetry.Start(
+			r.Context(),
+			"chatster.storage.history",
+			attribute.String("chatster.room", room),
+			attribute.Int("chatster.history.limit", limit),
+		)
+		defer span.End()
+		messages, err := database.GetRecentMessagesInRoomContext(ctx, room, limit)
 		if err != nil {
+			telemetry.MarkError(span)
 			slog.Warn("list message history", "err", err)
 			http.Error(w, "message history unavailable", http.StatusInternalServerError)
 			return
@@ -172,6 +210,26 @@ func messagesHandler(database db.Repository) http.HandlerFunc {
 			"limit":    limit,
 		})
 	}
+}
+
+func traceHTTP(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		route := "unmatched"
+		if current := mux.CurrentRoute(r); current != nil {
+			if template, err := current.GetPathTemplate(); err == nil && template != "" {
+				route = template
+			}
+		}
+		parent := propagation.TraceContext{}.Extract(r.Context(), propagation.HeaderCarrier(r.Header))
+		ctx, span := telemetry.Start(
+			parent,
+			"chatster.http.request",
+			attribute.String("http.request.method", r.Method),
+			attribute.String("http.route", route),
+		)
+		defer span.End()
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
 }
 
 func enableCORS(next http.Handler) http.Handler {
@@ -237,5 +295,6 @@ func mount(cfg config.Config, hub *Hub, database db.Repository) http.Handler {
 	}
 
 	r.Use(enableCORS)
+	r.Use(traceHTTP)
 	return r
 }

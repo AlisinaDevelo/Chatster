@@ -1,7 +1,7 @@
 ---
 id: 0005
 title: Add opt-in OpenTelemetry tracing
-status: backlog
+status: in-progress
 agent: observability-specialist
 model: sonnet
 depends_on: []

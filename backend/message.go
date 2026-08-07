@@ -7,6 +7,8 @@ import (
 
 	"github.com/AliSinaDevelo/Chatster/db"
 	"github.com/AliSinaDevelo/Chatster/internal/metrics"
+	"github.com/AliSinaDevelo/Chatster/internal/telemetry"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 const (
@@ -44,13 +46,32 @@ func saveMessageObserved(database db.Repository, username, content, msgType stri
 }
 
 func saveMessageObservedInRoom(database db.Repository, room, username, content, msgType string) (*db.Message, error) {
+	return saveMessageObservedInRoomContext(context.Background(), database, room, username, content, msgType)
+}
+
+func saveMessageObservedInRoomContext(parent context.Context, database db.Repository, room, username, content, msgType string) (*db.Message, error) {
 	started := time.Now()
-	ctx, cancel := context.WithTimeout(context.Background(), storageOperationTimeout)
+	if parent == nil {
+		parent = context.Background()
+	}
+	ctx, cancel := context.WithTimeout(parent, storageOperationTimeout)
 	defer cancel()
+	spanRoom, err := db.NormalizeRoom(room)
+	if err != nil {
+		spanRoom = "invalid"
+	}
+	ctx, span := telemetry.Start(
+		ctx,
+		"chatster.storage.save_message",
+		attribute.String("chatster.room", spanRoom),
+		attribute.String("chatster.message.type", msgType),
+	)
+	defer span.End()
 	msg, err := database.SaveMessageInRoomContext(ctx, room, username, content, msgType)
 	result := "ok"
 	if err != nil {
 		result = "error"
+		telemetry.MarkError(span)
 	}
 	metrics.MessagePersistDuration.WithLabelValues(result).Observe(time.Since(started).Seconds())
 	return msg, err

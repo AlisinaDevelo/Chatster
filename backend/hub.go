@@ -10,6 +10,8 @@ import (
 
 	"github.com/AliSinaDevelo/Chatster/db"
 	"github.com/AliSinaDevelo/Chatster/internal/metrics"
+	"github.com/AliSinaDevelo/Chatster/internal/telemetry"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 // Hub manages all connected clients.
@@ -71,12 +73,12 @@ func (h *Hub) registerClient(client *Client) bool {
 		Room:     room,
 	}
 
-	_, err := saveMessageObservedInRoom(h.database, room, notification.Username, notification.Content, notification.Type)
+	_, err := saveMessageObservedInRoomContext(client.traceContext(), h.database, room, notification.Username, notification.Content, notification.Type)
 	if err != nil {
 		slog.Warn("save join notification", "err", err)
 	}
 
-	h.publish(notification)
+	h.publishContext(client.traceContext(), notification)
 	return true
 }
 
@@ -101,24 +103,35 @@ func (h *Hub) disconnectClientLocked(client *Client) {
 		Room:     room,
 	}
 
-	if _, err := saveMessageObservedInRoom(h.database, room, notification.Username, notification.Content, notification.Type); err != nil {
+	if _, err := saveMessageObservedInRoomContext(client.traceContext(), h.database, room, notification.Username, notification.Content, notification.Type); err != nil {
 		slog.Warn("save leave notification", "err", err)
 	}
 
-	h.publish(notification)
+	h.publishContext(client.traceContext(), notification)
 }
 
-func (h *Hub) publish(message Message) bool {
+func (h *Hub) publishContext(parent context.Context, message Message) bool {
+	_, span := telemetry.Start(
+		parent,
+		"chatster.websocket.broadcast.enqueue",
+		attribute.String("chatster.room", message.Room),
+		attribute.String("chatster.message.type", message.Type),
+	)
+	defer span.End()
+
 	select {
 	case <-h.done:
+		span.SetAttributes(attribute.String("chatster.broadcast.result", "stopped"))
 		return false
 	default:
 	}
 
 	select {
 	case h.broadcast <- message:
+		span.SetAttributes(attribute.String("chatster.broadcast.result", "queued"))
 		return true
 	case <-h.done:
+		span.SetAttributes(attribute.String("chatster.broadcast.result", "stopped"))
 		return false
 	}
 }
@@ -283,10 +296,18 @@ func (h *Hub) drain(ctx context.Context) error {
 
 func (h *Hub) sendMessageHistory(client *Client) {
 	room := client.room()
-	ctx, cancel := context.WithTimeout(context.Background(), storageOperationTimeout)
+	ctx, cancel := context.WithTimeout(client.traceContext(), storageOperationTimeout)
 	defer cancel()
+	ctx, span := telemetry.Start(
+		ctx,
+		"chatster.storage.history",
+		attribute.String("chatster.room", room),
+		attribute.Int("chatster.history.limit", 50),
+	)
+	defer span.End()
 	messages, err := h.database.GetRecentMessagesInRoomContext(ctx, room, 50)
 	if err != nil {
+		telemetry.MarkError(span)
 		slog.Warn("message history", "err", err)
 		return
 	}

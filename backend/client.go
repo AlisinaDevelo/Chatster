@@ -10,7 +10,10 @@ import (
 	"github.com/AliSinaDevelo/Chatster/db"
 	"github.com/AliSinaDevelo/Chatster/internal/config"
 	"github.com/AliSinaDevelo/Chatster/internal/metrics"
+	"github.com/AliSinaDevelo/Chatster/internal/telemetry"
 	"github.com/gorilla/websocket"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/time/rate"
 )
 
@@ -38,6 +41,8 @@ type Client struct {
 	send       chan Message
 	done       chan struct{}
 	closeOnce  sync.Once
+	traceCtx   context.Context
+	traceSpan  trace.Span
 }
 
 func (c *Client) writeJSON(v any) error {
@@ -72,6 +77,22 @@ func (c *Client) room() string {
 		return db.DefaultRoom
 	}
 	return c.Room
+}
+
+func (c *Client) traceContext() context.Context {
+	if c.traceCtx == nil {
+		return context.Background()
+	}
+	return c.traceCtx
+}
+
+func (c *Client) finishTrace() {
+	if c.traceSpan == nil {
+		return
+	}
+	c.traceSpan.SetAttributes(attribute.String("chatster.websocket.lifecycle", "closed"))
+	c.traceSpan.End()
+	c.traceSpan = nil
 }
 
 func (c *Client) enqueue(message Message) bool {
@@ -129,9 +150,16 @@ func (c *Client) sendRateLimitNotice() {
 }
 
 func (c *Client) auditRejectedMessage(reason, content string) {
-	ctx, cancel := context.WithTimeout(context.Background(), storageOperationTimeout)
+	ctx, cancel := context.WithTimeout(c.traceContext(), storageOperationTimeout)
 	defer cancel()
+	ctx, span := telemetry.Start(
+		ctx,
+		"chatster.storage.moderation_event",
+		attribute.String("chatster.moderation.reason", reason),
+	)
+	defer span.End()
 	if _, err := c.Hub.database.SaveModerationEventContext(ctx, c.ID, c.username(), reason, content); err != nil {
+		telemetry.MarkError(span)
 		slog.Warn("save moderation audit event", "err", err, "reason", reason, "session_id", c.ID)
 	}
 }
@@ -186,6 +214,7 @@ func (c *Client) readMessages() {
 		c.Hub.unregisterClient(c)
 		c.Hub.notifyClientFinished(c)
 		c.close()
+		c.finishTrace()
 	}()
 
 	c.Conn.SetReadLimit(maxWebSocketReadBytes)
@@ -240,7 +269,7 @@ func (c *Client) readMessages() {
 		msg.Username = c.username()
 		msg.Room = c.room()
 
-		dbMsg, err := saveMessageObservedInRoom(c.Hub.database, msg.Room, msg.Username, msg.Content, msg.Type)
+		dbMsg, err := saveMessageObservedInRoomContext(c.traceContext(), c.Hub.database, msg.Room, msg.Username, msg.Content, msg.Type)
 		if err != nil {
 			slog.Warn("save message", "err", err)
 		} else {
@@ -249,7 +278,7 @@ func (c *Client) readMessages() {
 		}
 
 		metrics.MessagesIngested.Inc()
-		if !c.Hub.publish(msg) {
+		if !c.Hub.publishContext(c.traceContext(), msg) {
 			return
 		}
 	}

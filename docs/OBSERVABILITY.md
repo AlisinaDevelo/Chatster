@@ -65,20 +65,67 @@ These are **illustrative** targets for a small internal deployment; tune with re
 
 Client-perceived message send latency still needs a browser-side beacon or explicit ack path; the current server histograms cover persistence and hub fanout.
 
-## Tracing (recommended next step)
+## Tracing (opt-in)
 
-**OpenTelemetry** (OTel) would add:
+Chatster includes a small OpenTelemetry tracing path, but it is disabled unless
+configured. The default local and CI process creates no exporter, makes no
+collector connection, and keeps the existing Prometheus and `slog` signals
+unchanged.
 
-- Trace context over HTTP upgrade and first WS frames (where the stack supports it).
-- Spans for DB queries and hub broadcast.
+The application uses manual spans at boundaries that cross goroutines or storage
+adapters:
 
-Why not bundled here: OTel pulls a larger dependency tree and exporter configuration (OTLP endpoint, sampling). For a portfolio reference, **Prometheus + logs + documented OTel path** keeps the binary smaller while still showing senior-level awareness.
+| Span | Important attributes | Parent |
+|------|----------------------|--------|
+| `chatster.http.request` | HTTP method and matched route template | incoming request context |
+| `chatster.storage.ping` | operation | health request |
+| `chatster.storage.history` | normalized room and bounded limit | history request or WebSocket session |
+| `chatster.websocket.session` | normalized room and lifecycle result | HTTP upgrade request |
+| `chatster.storage.save_message` | normalized room and message type | WebSocket session where available |
+| `chatster.storage.moderation_event` | bounded rejection reason | WebSocket session where available |
+| `chatster.websocket.broadcast.enqueue` | normalized room, message type, queue result | message or notification operation |
 
-**Adoption outline**
+Message bodies, usernames, session IDs, URLs with query values, secrets, and
+database error strings are intentionally excluded from span attributes and
+statuses. Room names are normalized by the existing database boundary before
+they are used as trace attributes.
 
-1. Initialize a `TracerProvider` in `main` with resource attributes (`service.name=chatster`).
-2. Instrument HTTP mux with `otelhttp` middleware (upgrade routes need careful testing).
-3. Use database-specific OTel instrumentation or manual spans in the `db` package for query latency.
+### Collector setup
+
+Tracing uses the OTLP/HTTP exporter and the standard OpenTelemetry environment
+variables. Enable it explicitly when a collector is available:
+
+```bash
+export CHATSTER_OTEL_ENABLED=true
+export OTEL_SERVICE_NAME=chatster
+export OTEL_TRACES_EXPORTER=otlp
+export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
+go run .
+```
+
+Use `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` when the collector requires a complete
+trace endpoint, or add the standard OTLP headers and timeout variables for the
+deployment. `OTEL_TRACES_EXPORTER=none` disables tracing. An OTLP exporter or
+OTLP endpoint also opts in without the Chatster flag; the explicit flag is the
+recommended production setting because it makes intent clear.
+
+The provider uses `OTEL_SERVICE_NAME` when present and otherwise sets
+`service.name=chatster`. The SDK also reads the standard sampler variables, for
+example:
+
+```bash
+export OTEL_TRACES_SAMPLER=parentbased_traceidratio
+export OTEL_TRACES_SAMPLER_ARG=0.10
+```
+
+On shutdown, `main` stops the HTTP server and WebSocket hub, then gives the
+provider up to ten seconds to flush pending spans. Collector outages do not
+change message handling; they are reported through the exporter shutdown path.
+
+Traces answer which request or connection was slow; Prometheus histograms
+answer how often and how long across the service; structured logs provide the
+bounded operational event and error context. Keep all three signals free of
+message content and credentials when adding new instrumentation.
 
 ## Secrets
 
