@@ -22,8 +22,8 @@ split between public-demo proof and optional platform extensions.
   choose and document the trust boundary before binding identities to sessions or room
   authorization. Anonymous demo access remains an explicit scope decision.
 - **Redis fan-out** ([issue #27](https://github.com/AlisinaDevelo/Chatster/issues/27)):
-  implement only after the event contract is exercised against a real multi-instance
-  environment. Redis Pub/Sub is live fan-out, not durable replay.
+  implemented as an opt-in, namespaced live transport with CI-backed multi-instance coverage.
+  Redis Pub/Sub is live fan-out, not durable replay; reconnect history remains the catch-up path.
 - **Postgres mode** ([issue #25](https://github.com/AlisinaDevelo/Chatster/issues/25)):
   the repository mode and CI contract are ready; adopt it when shared durable storage is
   needed beyond the single-node SQLite demo.
