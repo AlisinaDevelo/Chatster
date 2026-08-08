@@ -1,7 +1,7 @@
 ---
 id: 0010
 title: Bind authenticated identity to sessions and room authorization
-status: review
+status: done
 agent: security-auditor
 model: opus
 depends_on: []
@@ -28,4 +28,4 @@ Use the threat model as the baseline and require a security review before implem
 
 - `CHATSTER_REDIS_TEST_URL=redis://127.0.0.1:6379/15 go test -race -coverprofile=/tmp/chatster-coverage.out ./...` passed with 61.1% aggregate statement coverage.
 - `go vet ./...`, frontend ESLint, 30 Vitest tests, the Vite production build, and three Chromium Playwright workflows passed locally.
-- SQLite and Redis identity propagation were exercised locally. The GitHub Postgres contract, pinned golangci-lint, and production-image smoke remain the final review gates.
+- GitHub Actions run [31236267397](https://github.com/AlisinaDevelo/Chatster/actions/runs/31236267397) passed the pinned golangci-lint gate, race-enabled Redis suite, Postgres repository contract, frontend browser workflows, and production-image smoke.
