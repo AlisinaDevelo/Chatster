@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/AliSinaDevelo/Chatster/db"
+	"github.com/AliSinaDevelo/Chatster/internal/broker"
 	"github.com/AliSinaDevelo/Chatster/internal/config"
 	"github.com/AliSinaDevelo/Chatster/internal/metrics"
 	"github.com/AliSinaDevelo/Chatster/internal/telemetry"
@@ -76,8 +77,28 @@ func main() {
 		slog.Info("moderation audit retention cleanup", "deleted_events", deleted, "retention_days", cfg.AuditRetentionDays)
 	}
 
-	hub := newHub(repository)
+	var fanout broker.Fanout
+	if cfg.RedisURL != "" {
+		instanceID := cfg.InstanceID
+		if instanceID == "" {
+			instanceID = newInstanceID()
+		}
+		fanout, err = broker.NewRedis(broker.Config{
+			URL:        cfg.RedisURL,
+			Namespace:  cfg.RedisNamespace,
+			InstanceID: instanceID,
+		})
+		if err != nil {
+			slog.Error("redis fan-out init failed", "err", err)
+			os.Exit(1)
+		}
+		defer func() { _ = fanout.Close() }()
+		slog.Info("redis fan-out enabled", "namespace", cfg.RedisNamespace, "instance_id", instanceID)
+	}
+
+	hub := newHub(repository, fanout)
 	go hub.run()
+	hub.startBroker()
 
 	handler := mount(cfg, hub, repository)
 

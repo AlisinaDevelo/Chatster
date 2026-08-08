@@ -14,6 +14,9 @@ func TestFromEnvDefaults(t *testing.T) {
 	t.Setenv("CHATSTER_POSTGRES_DSN", "")
 	t.Setenv("CHATSTER_POSTGRES_MIN_CONNS", "")
 	t.Setenv("CHATSTER_POSTGRES_MAX_CONNS", "")
+	t.Setenv("CHATSTER_REDIS_URL", "")
+	t.Setenv("CHATSTER_REDIS_NAMESPACE", "")
+	t.Setenv("CHATSTER_INSTANCE_ID", "")
 	t.Setenv("CHATSTER_STATIC_DIR", "")
 	t.Setenv("CHATSTER_ALLOWED_ORIGINS", "")
 	t.Setenv("CHATSTER_MESSAGE_RETENTION_DAYS", "")
@@ -32,6 +35,9 @@ func TestFromEnvDefaults(t *testing.T) {
 	}
 	if cfg.PostgresMinConns != defaultPostgresMinConns || cfg.PostgresMaxConns != defaultPostgresMaxConns {
 		t.Fatalf("Postgres pool defaults: min=%d max=%d", cfg.PostgresMinConns, cfg.PostgresMaxConns)
+	}
+	if cfg.RedisURL != "" || cfg.RedisNamespace != defaultRedisNamespace || cfg.InstanceID != "" {
+		t.Fatalf("Redis defaults: url=%q namespace=%q instance=%q", cfg.RedisURL, cfg.RedisNamespace, cfg.InstanceID)
 	}
 	if cfg.StaticDir != "" {
 		t.Fatalf("StaticDir: got %q want empty", cfg.StaticDir)
@@ -82,6 +88,9 @@ func TestFromEnvOverride(t *testing.T) {
 	t.Setenv("CHATSTER_POSTGRES_DSN", " postgres://chatster:secret@db/chatster ")
 	t.Setenv("CHATSTER_POSTGRES_MIN_CONNS", "3")
 	t.Setenv("CHATSTER_POSTGRES_MAX_CONNS", "12")
+	t.Setenv("CHATSTER_REDIS_URL", " redis://:secret@redis.test:6379/2 ")
+	t.Setenv("CHATSTER_REDIS_NAMESPACE", " production ")
+	t.Setenv("CHATSTER_INSTANCE_ID", " instance-a ")
 	t.Setenv("CHATSTER_STATIC_DIR", "/app/static")
 	t.Setenv("CHATSTER_ALLOWED_ORIGINS", " https://a.test , https://b.test ")
 	t.Setenv("CHATSTER_MESSAGE_RETENTION_DAYS", "30")
@@ -99,6 +108,9 @@ func TestFromEnvOverride(t *testing.T) {
 	}
 	if cfg.PostgresMinConns != 3 || cfg.PostgresMaxConns != 12 {
 		t.Fatalf("Postgres pool: min=%d max=%d", cfg.PostgresMinConns, cfg.PostgresMaxConns)
+	}
+	if cfg.RedisURL != "redis://:secret@redis.test:6379/2" || cfg.RedisNamespace != "production" || cfg.InstanceID != "instance-a" {
+		t.Fatalf("Redis config: url=%q namespace=%q instance=%q", cfg.RedisURL, cfg.RedisNamespace, cfg.InstanceID)
 	}
 	if cfg.StaticDir != "/app/static" {
 		t.Fatalf("StaticDir: got %q want /app/static", cfg.StaticDir)

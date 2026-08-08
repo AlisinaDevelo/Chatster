@@ -19,6 +19,7 @@ const (
 	defaultMessageBurst         = 10
 	defaultMessageRetentionDays = 0
 	defaultAuditRetentionDays   = 0
+	defaultRedisNamespace       = "development"
 )
 
 // Config holds process configuration loaded from the environment.
@@ -29,6 +30,9 @@ type Config struct {
 	PostgresDSN             string
 	PostgresMinConns        int32
 	PostgresMaxConns        int32
+	RedisURL                string
+	RedisNamespace          string
+	InstanceID              string
 	StaticDir               string
 	AllowedOrigins          []string
 	WSUpgradeRPS            float64
@@ -49,6 +53,9 @@ type Config struct {
 // CHATSTER_POSTGRES_DSN — Postgres connection string, required when storage is "postgres"; never logged.
 // CHATSTER_POSTGRES_MIN_CONNS — Postgres pool minimum (default 2); invalid values fail startup in Postgres mode.
 // CHATSTER_POSTGRES_MAX_CONNS — Postgres pool maximum (default 10); invalid values fail startup in Postgres mode.
+// CHATSTER_REDIS_URL — optional Redis URL; setting it enables cross-instance Pub/Sub fan-out and validates connectivity at startup.
+// CHATSTER_REDIS_NAMESPACE — environment namespace for Redis channels (default "development").
+// CHATSTER_INSTANCE_ID — optional process identifier for loop prevention; generated when Redis is enabled and unset.
 // CHATSTER_STATIC_DIR — optional directory of built frontend assets to serve from the backend.
 // CHATSTER_ALLOWED_ORIGINS — comma-separated WebSocket Origin allowlist; empty = allow all (dev-friendly).
 // CHATSTER_WS_UPGRADE_RPS — max WS upgrades per IP per second (default 5); "0" disables limiting.
@@ -65,6 +72,9 @@ func FromEnv() Config {
 		PostgresDSN:      strings.TrimSpace(os.Getenv("CHATSTER_POSTGRES_DSN")),
 		PostgresMinConns: parsePoolSizeEnv("CHATSTER_POSTGRES_MIN_CONNS", defaultPostgresMinConns),
 		PostgresMaxConns: parsePoolSizeEnv("CHATSTER_POSTGRES_MAX_CONNS", defaultPostgresMaxConns),
+		RedisURL:         strings.TrimSpace(os.Getenv("CHATSTER_REDIS_URL")),
+		RedisNamespace:   strings.TrimSpace(os.Getenv("CHATSTER_REDIS_NAMESPACE")),
+		InstanceID:       strings.TrimSpace(os.Getenv("CHATSTER_INSTANCE_ID")),
 		StaticDir:        strings.TrimSpace(os.Getenv("CHATSTER_STATIC_DIR")),
 		AllowedOrigins:   splitCSV(os.Getenv("CHATSTER_ALLOWED_ORIGINS")),
 		WSUpgradeRPS:     defaultWSUpgradeRPS,
@@ -81,6 +91,9 @@ func FromEnv() Config {
 	}
 	if cfg.Storage == "" {
 		cfg.Storage = defaultStorage
+	}
+	if cfg.RedisNamespace == "" {
+		cfg.RedisNamespace = defaultRedisNamespace
 	}
 
 	if v := strings.TrimSpace(os.Getenv("CHATSTER_MESSAGE_RETENTION_DAYS")); v != "" {

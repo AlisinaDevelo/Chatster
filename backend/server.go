@@ -44,11 +44,23 @@ func clientIP(r *http.Request) string {
 }
 
 func newSessionID() string {
+	return newOpaqueID("sess_")
+}
+
+func newInstanceID() string {
+	return newOpaqueID("instance_")
+}
+
+func newEventID() string {
+	return newOpaqueID("event_")
+}
+
+func newOpaqueID(prefix string) string {
 	var b [16]byte
 	if _, err := rand.Read(b[:]); err != nil {
-		return fmt.Sprintf("sess_%d", time.Now().UnixNano())
+		return fmt.Sprintf("%s%d", prefix, time.Now().UnixNano())
 	}
-	return "sess_" + hex.EncodeToString(b[:])
+	return prefix + hex.EncodeToString(b[:])
 }
 
 func serveWs(hub *Hub, cfg config.Config, up websocket.Upgrader, wsRL *ratelimit.WSUpgrade, w http.ResponseWriter, r *http.Request) {

@@ -97,3 +97,22 @@ func TestChannelCanonicalizesNamespaceAndRoom(t *testing.T) {
 		t.Fatalf("channel: got %q", channel)
 	}
 }
+
+func TestChannelPatternUsesNamespaceWithoutRoomInput(t *testing.T) {
+	pattern, err := ChannelPattern(" Production ")
+	if err != nil {
+		t.Fatalf("ChannelPattern: %v", err)
+	}
+	if pattern != "chatster:v1:production:room:*" {
+		t.Fatalf("pattern: got %q", pattern)
+	}
+}
+
+func TestValidateInstanceIDRejectsUnsafeValues(t *testing.T) {
+	if err := ValidateInstanceID("instance-a"); err != nil {
+		t.Fatalf("valid instance ID rejected: %v", err)
+	}
+	if err := ValidateInstanceID("instance:a"); err == nil {
+		t.Fatal("unsafe instance ID should be rejected")
+	}
+}

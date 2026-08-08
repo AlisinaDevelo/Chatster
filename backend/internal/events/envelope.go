@@ -117,6 +117,21 @@ func Channel(namespace, room string) (string, error) {
 	return fmt.Sprintf("chatster:v%d:%s:room:%s", Version, namespace, room), nil
 }
 
+// ChannelPattern returns the subscription pattern for every room in a namespace.
+func ChannelPattern(namespace string) (string, error) {
+	namespace, err := normalizeToken(namespace, "broker namespace")
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("chatster:v%d:%s:room:*", Version, namespace), nil
+}
+
+// ValidateInstanceID validates the origin identifier used for loop prevention.
+func ValidateInstanceID(instanceID string) error {
+	_, err := normalizeToken(instanceID, "instance ID")
+	return err
+}
+
 func normalizeToken(value, field string) (string, error) {
 	value = strings.ToLower(strings.TrimSpace(value))
 	if value == "" {

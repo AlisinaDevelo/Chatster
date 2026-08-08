@@ -1,7 +1,7 @@
 ---
 id: 0009
 title: Add an optional Redis room fan-out adapter
-status: backlog
+status: in-progress
 agent: backend-specialist
 model: sonnet
 depends_on: [0008]
@@ -19,7 +19,7 @@ Allow multiple Chatster instances to deliver live room messages through an optio
 - [ ] Documentation states Redis Pub/Sub at-most-once semantics and names Redis Streams or another durable path as the follow-up when replay/at-least-once delivery is required.
 
 ## Context
-Blocked by issue 0008. Preserve the current SQLite-only and in-process modes, and keep room authorization/authentication separate from transport fan-out.
+Dependency 0008 is complete. Preserve the current SQLite-only and in-process modes, and keep room authorization/authentication separate from transport fan-out.
 
 ## Notes
 Research anchor: https://redis.io/docs/latest/develop/pubsub/. Do not claim durable delivery from Pub/Sub alone.

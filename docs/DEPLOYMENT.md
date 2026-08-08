@@ -42,6 +42,9 @@ Then open:
 | `CHATSTER_DB_PATH` | `/data/chatster.db` | Keep SQLite on persistent storage; ignored by Postgres mode. |
 | `CHATSTER_POSTGRES_DSN` | `postgres://...?...` | Secret DSN required for Postgres mode; use `sslmode=verify-full` in production. |
 | `CHATSTER_POSTGRES_MIN_CONNS` / `CHATSTER_POSTGRES_MAX_CONNS` | `2` / `10` | Size the Postgres connection pool for the instance. |
+| `CHATSTER_REDIS_URL` | `rediss://:<secret>@redis.example.com:6379/0` | Optional Redis URL; enables cross-instance live room fan-out. Startup fails if configured Redis is unreachable. |
+| `CHATSTER_REDIS_NAMESPACE` | `production` | Namespace shared by instances in the same environment; defaults to `development`. |
+| `CHATSTER_INSTANCE_ID` | `chatster-web-1` | Optional unique instance ID; generated when unset. |
 | `CHATSTER_STATIC_DIR` | `/app/static` | Already set by the production image. |
 | `CHATSTER_ALLOWED_ORIGINS` | `https://chatster.example.com` | Restrict browser WebSocket origins. |
 | `CHATSTER_WS_UPGRADE_RPS` | `5` | Per-IP upgrade abuse control. |
@@ -67,9 +70,9 @@ not silently fall back to SQLite. Use a trusted CA and verify the hostname. Keep
 `render.yaml`, image layers, logs, and committed `.env` files. Back up Postgres with managed
 PITR or a tested `pg_dump`/restore procedure.
 
-Postgres makes durable history shareable, but the WebSocket hub remains process-local. Multiple
-instances still need the Redis/event-fanout work described in [SCALING.md](SCALING.md) before
-clients on different instances can see the same live room broadcasts.
+Postgres makes durable history shareable. For live broadcasts across instances, also configure
+the opt-in Redis fan-out described in [SCALING.md](SCALING.md). Redis Pub/Sub is at-most-once;
+clients should use history on reconnect to catch up.
 
 ## Platform notes
 

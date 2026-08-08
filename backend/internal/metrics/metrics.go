@@ -87,4 +87,40 @@ var (
 		Help:      "Duration of hub fanout enqueue work for one broadcast message.",
 		Buckets:   []float64{0.0005, 0.001, 0.0025, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5},
 	})
+
+	RedisConnections = promauto.NewCounterVec(prometheus.CounterOpts{
+		Namespace: "chatster",
+		Name:      "redis_connections_total",
+		Help:      "Redis broker connection attempts by result (ok, error).",
+	}, []string{"result"})
+
+	RedisPublishes = promauto.NewCounterVec(prometheus.CounterOpts{
+		Namespace: "chatster",
+		Name:      "redis_publishes_total",
+		Help:      "Redis broker publish attempts by result (ok, error).",
+	}, []string{"result"})
+
+	RedisSubscriptions = promauto.NewCounterVec(prometheus.CounterOpts{
+		Namespace: "chatster",
+		Name:      "redis_subscriptions_total",
+		Help:      "Redis broker subscription attempts by result (ok, error).",
+	}, []string{"result"})
+
+	RedisDecodes = promauto.NewCounterVec(prometheus.CounterOpts{
+		Namespace: "chatster",
+		Name:      "redis_decodes_total",
+		Help:      "Redis broker payload decodes by result (ok, error).",
+	}, []string{"result"})
+
+	RedisDrops = promauto.NewCounterVec(prometheus.CounterOpts{
+		Namespace: "chatster",
+		Name:      "redis_drops_total",
+		Help:      "Redis broker events dropped by reason.",
+	}, []string{"reason"})
+
+	RedisReconnects = promauto.NewCounter(prometheus.CounterOpts{
+		Namespace: "chatster",
+		Name:      "redis_reconnects_total",
+		Help:      "Redis broker subscriber reconnect attempts.",
+	})
 )

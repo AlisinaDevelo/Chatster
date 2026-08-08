@@ -9,31 +9,51 @@ import (
 	"time"
 
 	"github.com/AliSinaDevelo/Chatster/db"
+	"github.com/AliSinaDevelo/Chatster/internal/broker"
+	"github.com/AliSinaDevelo/Chatster/internal/events"
 	"github.com/AliSinaDevelo/Chatster/internal/metrics"
 	"github.com/AliSinaDevelo/Chatster/internal/telemetry"
 	"go.opentelemetry.io/otel/attribute"
 )
 
+const maxSeenBrokerEvents = 4096
+
 // Hub manages all connected clients.
 type Hub struct {
-	clients      map[*Client]bool
-	broadcast    chan Message
-	unregister   chan *Client
-	done         chan struct{}
-	runDone      chan struct{}
-	stopOnce     sync.Once
-	shutdownOnce sync.Once
-	shutdownErr  error
-	runStarted   atomic.Bool
-	mutex        sync.Mutex
-	draining     bool
-	drainEvents  chan *Client
-	drainPending map[*Client]struct{}
-	finished     map[*Client]struct{}
-	database     db.Repository
+	clients       map[*Client]bool
+	broadcast     chan Message
+	unregister    chan *Client
+	done          chan struct{}
+	runDone       chan struct{}
+	stopOnce      sync.Once
+	shutdownOnce  sync.Once
+	shutdownErr   error
+	runStarted    atomic.Bool
+	mutex         sync.Mutex
+	draining      bool
+	drainEvents   chan *Client
+	drainPending  map[*Client]struct{}
+	finished      map[*Client]struct{}
+	database      db.Repository
+	fanout        broker.Fanout
+	instanceID    string
+	brokerCtx     context.Context
+	brokerCancel  context.CancelFunc
+	brokerPublish chan events.Envelope
+	brokerWG      sync.WaitGroup
+	seenEvents    map[string]struct{}
+	seenEventIDs  []string
 }
 
-func newHub(database db.Repository) *Hub {
+func newHub(database db.Repository, fanouts ...broker.Fanout) *Hub {
+	var fanout broker.Fanout
+	if len(fanouts) > 0 {
+		fanout = fanouts[0]
+	}
+	instanceID := ""
+	if fanout != nil {
+		instanceID = fanout.InstanceID()
+	}
 	return &Hub{
 		clients: make(map[*Client]bool),
 		// Buffered so client read loops are not blocked while the hub writes to their socket (avoids deadlock).
@@ -44,6 +64,9 @@ func newHub(database db.Repository) *Hub {
 		runDone:    make(chan struct{}),
 		finished:   make(map[*Client]struct{}),
 		database:   database,
+		fanout:     fanout,
+		instanceID: instanceID,
+		seenEvents: make(map[string]struct{}),
 	}
 }
 
@@ -73,9 +96,12 @@ func (h *Hub) registerClient(client *Client) bool {
 		Room:     room,
 	}
 
-	_, err := saveMessageObservedInRoomContext(client.traceContext(), h.database, room, notification.Username, notification.Content, notification.Type)
+	persisted, err := saveMessageObservedInRoomContext(client.traceContext(), h.database, room, notification.Username, notification.Content, notification.Type)
 	if err != nil {
 		slog.Warn("save join notification", "err", err)
+	} else {
+		notification.ID = persisted.ID
+		notification.Timestamp = persisted.Timestamp
 	}
 
 	h.publishContext(client.traceContext(), notification)
@@ -103,8 +129,12 @@ func (h *Hub) disconnectClientLocked(client *Client) {
 		Room:     room,
 	}
 
-	if _, err := saveMessageObservedInRoomContext(client.traceContext(), h.database, room, notification.Username, notification.Content, notification.Type); err != nil {
+	persisted, err := saveMessageObservedInRoomContext(client.traceContext(), h.database, room, notification.Username, notification.Content, notification.Type)
+	if err != nil {
 		slog.Warn("save leave notification", "err", err)
+	} else {
+		notification.ID = persisted.ID
+		notification.Timestamp = persisted.Timestamp
 	}
 
 	h.publishContext(client.traceContext(), notification)
@@ -129,10 +159,141 @@ func (h *Hub) publishContext(parent context.Context, message Message) bool {
 	select {
 	case h.broadcast <- message:
 		span.SetAttributes(attribute.String("chatster.broadcast.result", "queued"))
+		h.queueBrokerMessage(message)
 		return true
 	case <-h.done:
 		span.SetAttributes(attribute.String("chatster.broadcast.result", "stopped"))
 		return false
+	}
+}
+
+func (h *Hub) queueBrokerMessage(message Message) {
+	if h.fanout == nil || h.brokerPublish == nil {
+		return
+	}
+	if message.ID <= 0 || message.Timestamp.IsZero() {
+		metrics.RedisDrops.WithLabelValues("not_persisted").Inc()
+		return
+	}
+
+	event, err := events.New(newEventID(), message.Room, h.instanceID, events.Message{
+		ID:       message.ID,
+		Username: message.Username,
+		Content:  message.Content,
+		Type:     message.Type,
+	}, message.Timestamp)
+	if err != nil {
+		metrics.RedisDrops.WithLabelValues("invalid_event").Inc()
+		slog.Warn("build redis event", "room", message.Room, "err", err)
+		return
+	}
+
+	select {
+	case h.brokerPublish <- event:
+	default:
+		metrics.RedisDrops.WithLabelValues("publish_backpressure").Inc()
+		slog.Warn("drop redis event", "room", event.Room, "reason", "publish_backpressure")
+	}
+}
+
+func (h *Hub) handleRemoteEvent(event events.Envelope) {
+	if event.OriginInstance == h.instanceID {
+		metrics.RedisDrops.WithLabelValues("loop").Inc()
+		return
+	}
+	if !h.rememberBrokerEvent(event.EventID) {
+		metrics.RedisDrops.WithLabelValues("duplicate").Inc()
+		return
+	}
+	if h.isDraining() {
+		metrics.RedisDrops.WithLabelValues("draining").Inc()
+		return
+	}
+
+	message := Message{
+		ID:        event.Message.ID,
+		Username:  event.Message.Username,
+		Content:   event.Message.Content,
+		Type:      event.Message.Type,
+		Room:      event.Room,
+		Timestamp: event.Timestamp,
+	}
+	select {
+	case <-h.done:
+		return
+	case h.broadcast <- message:
+	default:
+		metrics.RedisDrops.WithLabelValues("client_backpressure").Inc()
+		slog.Warn("drop redis event", "room", event.Room, "reason", "client_backpressure")
+	}
+}
+
+func (h *Hub) rememberBrokerEvent(eventID string) bool {
+	h.mutex.Lock()
+	defer h.mutex.Unlock()
+	if _, seen := h.seenEvents[eventID]; seen {
+		return false
+	}
+	h.seenEvents[eventID] = struct{}{}
+	h.seenEventIDs = append(h.seenEventIDs, eventID)
+	if len(h.seenEventIDs) > maxSeenBrokerEvents {
+		oldest := h.seenEventIDs[0]
+		h.seenEventIDs = h.seenEventIDs[1:]
+		delete(h.seenEvents, oldest)
+	}
+	return true
+}
+
+func (h *Hub) startBroker() {
+	if h.fanout == nil {
+		return
+	}
+	h.brokerCtx, h.brokerCancel = context.WithCancel(context.Background())
+	h.brokerPublish = make(chan events.Envelope, outboundQueueSize*4)
+	h.brokerWG.Add(2)
+	go h.runBrokerPublisher()
+	go h.runBrokerSubscriber()
+}
+
+func (h *Hub) runBrokerPublisher() {
+	defer h.brokerWG.Done()
+	for {
+		select {
+		case <-h.brokerCtx.Done():
+			return
+		case event := <-h.brokerPublish:
+			ctx, cancel := context.WithTimeout(h.brokerCtx, storageOperationTimeout)
+			if err := h.fanout.Publish(ctx, event); err != nil {
+				slog.Warn("publish redis event", "room", event.Room, "err", err)
+			}
+			cancel()
+		}
+	}
+}
+
+func (h *Hub) runBrokerSubscriber() {
+	defer h.brokerWG.Done()
+	if err := h.fanout.Run(h.brokerCtx, h.handleRemoteEvent); err != nil && h.brokerCtx.Err() == nil {
+		slog.Warn("redis subscriber stopped", "err", err)
+	}
+}
+
+func (h *Hub) stopBroker(ctx context.Context) {
+	if h.brokerCancel == nil {
+		return
+	}
+	h.brokerCancel()
+	done := make(chan struct{})
+	go func() {
+		h.brokerWG.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-ctx.Done():
+	}
+	if err := h.fanout.Close(); err != nil {
+		slog.Warn("close redis broker", "err", err)
 	}
 }
 
@@ -242,6 +403,7 @@ func (h *Hub) drain(ctx context.Context) error {
 	}
 	events := h.drainEvents
 	h.mutex.Unlock()
+	h.stopBroker(ctx)
 
 	metrics.WSDrainClientsRemaining.Set(float64(len(clients)))
 	slog.Info("websocket drain started", "clients", len(clients), "close_code", shutdownCloseCode)
