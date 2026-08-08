@@ -41,12 +41,18 @@ const (
 const MaxAccessTokenBytes = 512
 
 var (
-	ErrAuthDisabled    = errors.New("session authentication is disabled")
-	ErrInvalidToken    = errors.New("invalid access token")
+	// ErrAuthDisabled indicates that the server is running in anonymous mode.
+	ErrAuthDisabled = errors.New("session authentication is disabled")
+	// ErrInvalidToken indicates that an access token is not configured or valid.
+	ErrInvalidToken = errors.New("invalid access token")
+	// ErrSessionRequired indicates that a request has no session cookie.
 	ErrSessionRequired = errors.New("session required")
-	ErrInvalidSession  = errors.New("invalid session")
-	ErrExpiredSession  = errors.New("session expired")
-	ErrRoomDenied      = errors.New("room access denied")
+	// ErrInvalidSession indicates that a session cookie cannot be verified.
+	ErrInvalidSession = errors.New("invalid session")
+	// ErrExpiredSession indicates that a verified session is past its expiry.
+	ErrExpiredSession = errors.New("session expired")
+	// ErrRoomDenied indicates that the principal has no grant for the room.
+	ErrRoomDenied = errors.New("room access denied")
 )
 
 // Config contains only server-side authentication configuration.
