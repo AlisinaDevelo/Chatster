@@ -46,7 +46,12 @@ Then open:
 | `CHATSTER_REDIS_NAMESPACE` | `production` | Namespace shared by instances in the same environment; defaults to `development`. |
 | `CHATSTER_INSTANCE_ID` | `chatster-web-1` | Optional unique instance ID; generated when unset. |
 | `CHATSTER_STATIC_DIR` | `/app/static` | Already set by the production image. |
-| `CHATSTER_ALLOWED_ORIGINS` | `https://chatster.example.com` | Restrict browser WebSocket origins. |
+| `CHATSTER_ALLOWED_ORIGINS` | `https://chatster.example.com` | Restrict browser HTTP credential requests and WebSocket origins; required in session mode. |
+| `CHATSTER_AUTH_MODE` | `anonymous` | Preserve the public demo, or set `session` to require authenticated room access. |
+| `CHATSTER_SESSION_SECRET` | secret | At least 32 random bytes used to sign session cookies; required in session mode. |
+| `CHATSTER_AUTH_USERS_JSON` | secret JSON | 32-512 byte high-entropy tokens mapped to stable user IDs, display names, and up to 64 allowed rooms. |
+| `CHATSTER_SESSION_TTL` | `1h` | Session lifetime, bounded to `1m` through `24h`. |
+| `CHATSTER_SESSION_COOKIE_SECURE` | `true` | Keep enabled behind production HTTPS; disable only for local HTTP testing. |
 | `CHATSTER_WS_UPGRADE_RPS` | `5` | Per-IP upgrade abuse control. |
 | `CHATSTER_MESSAGE_RPS` | `5` | Per-client message abuse control. |
 | `CHATSTER_MESSAGE_RETENTION_DAYS` | `30` | Optional startup cleanup for old chat history. |
@@ -74,11 +79,34 @@ Postgres makes durable history shareable. For live broadcasts across instances, 
 the opt-in Redis fan-out described in [SCALING.md](SCALING.md). Redis Pub/Sub is at-most-once;
 clients should use history on reconnect to catch up.
 
+## Session authentication mode
+
+The checked-in deployment remains an explicit anonymous public demo. For a private-room
+deployment, inject the following through the host's secret manager and serve the frontend and
+API from the same HTTPS site:
+
+```text
+CHATSTER_AUTH_MODE=session
+CHATSTER_ALLOWED_ORIGINS=https://chatster.example.com
+CHATSTER_SESSION_SECRET=<at-least-32-random-bytes>
+CHATSTER_AUTH_USERS_JSON=[{"token":"<32-to-512-random-bytes>","user_id":"usr_alice","display_name":"Alice","rooms":["general","engineering"]}]
+CHATSTER_SESSION_TTL=1h
+```
+
+The browser sends an access token once in the `Authorization` header to `POST /api/session`;
+the token is not stored by the frontend. The server returns a signed `HttpOnly`,
+`SameSite=Strict`, `Secure` cookie. History requests and WebSocket upgrades use that cookie,
+and the server independently checks the room grant. Session mode refuses startup without an
+Origin allowlist. Keep tokens and the signing secret out of `render.yaml`, logs, image layers,
+and committed environment files. Configure reverse proxies to redact `Authorization` and
+`Cookie` headers from request logs.
+
 ## Platform notes
 
 - Use one instance while Chatster uses SQLite and an in-memory WebSocket hub.
 - Attach a persistent disk/volume before accepting real traffic; without it, chat history and moderation audit rows disappear on redeploy.
 - Terminate TLS at the platform edge; the browser should use `https://` and `wss://`.
+- Keep `CHATSTER_SESSION_COOKIE_SECURE=true` in session mode and serve UI/API from the same HTTPS site.
 - If your platform injects a numeric dynamic port through `PORT`, Chatster uses it automatically when `CHATSTER_HTTP_ADDR` is unset. Set `CHATSTER_HTTP_ADDR` explicitly only when the platform uses a different address convention.
 - Scale-out requires the design in [SCALING.md](SCALING.md): shared storage plus sticky sessions or pub/sub fanout.
 

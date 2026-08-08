@@ -79,11 +79,21 @@ ALTER TABLE messages ADD COLUMN room TEXT NOT NULL DEFAULT 'general';
 CREATE INDEX IF NOT EXISTS idx_messages_room_timestamp
 	ON messages(room, julianday(timestamp));`,
 	},
+	{
+		version: 6,
+		name:    "bind_message_and_audit_user_ids",
+		sql: `
+ALTER TABLE messages ADD COLUMN user_id TEXT NOT NULL DEFAULT '';
+ALTER TABLE moderation_audit_log ADD COLUMN user_id TEXT NOT NULL DEFAULT '';
+CREATE INDEX IF NOT EXISTS idx_messages_user_id_timestamp
+	ON messages(user_id, julianday(timestamp)) WHERE user_id <> '';`,
+	},
 }
 
 // Message represents a chat message
 type Message struct {
 	ID        int64     `json:"id"`
+	UserID    string    `json:"user_id,omitempty"`
 	Username  string    `json:"username"`
 	Content   string    `json:"content"`
 	Type      string    `json:"type"`
@@ -95,6 +105,7 @@ type Message struct {
 type ModerationEvent struct {
 	ID             int64     `json:"id"`
 	SessionID      string    `json:"session_id"`
+	UserID         string    `json:"user_id,omitempty"`
 	Username       string    `json:"username"`
 	Reason         string    `json:"reason"`
 	ContentPreview string    `json:"content_preview"`
@@ -218,6 +229,11 @@ func (db *DB) SaveMessageInRoom(room, username, content, msgType string) (*Messa
 
 // SaveMessageInRoomContext saves a message with a caller-controlled context.
 func (db *DB) SaveMessageInRoomContext(ctx context.Context, room, username, content, msgType string) (*Message, error) {
+	return db.SaveMessageForUserInRoomContext(ctx, room, "", username, content, msgType)
+}
+
+// SaveMessageForUserInRoomContext saves a message with stable identity separate from its display name.
+func (db *DB) SaveMessageForUserInRoomContext(ctx context.Context, room, userID, username, content, msgType string) (*Message, error) {
 	room, err := NormalizeRoom(room)
 	if err != nil {
 		return nil, err
@@ -227,6 +243,7 @@ func (db *DB) SaveMessageInRoomContext(ctx context.Context, room, username, cont
 	if msgType == "username" {
 		now := time.Now().UTC()
 		return &Message{
+			UserID:    userID,
 			Username:  username,
 			Content:   content,
 			Type:      msgType,
@@ -235,14 +252,14 @@ func (db *DB) SaveMessageInRoomContext(ctx context.Context, room, username, cont
 		}, nil
 	}
 
-	stmt, err := db.PrepareContext(ctx, "INSERT INTO messages(room, username, content, type, timestamp) VALUES(?, ?, ?, ?, ?)")
+	stmt, err := db.PrepareContext(ctx, "INSERT INTO messages(room, user_id, username, content, type, timestamp) VALUES(?, ?, ?, ?, ?, ?)")
 	if err != nil {
 		return nil, err
 	}
 	defer func() { _ = stmt.Close() }()
 
 	now := time.Now().UTC()
-	result, err := stmt.ExecContext(ctx, room, username, content, msgType, now)
+	result, err := stmt.ExecContext(ctx, room, userID, username, content, msgType, now)
 	if err != nil {
 		return nil, err
 	}
@@ -254,6 +271,7 @@ func (db *DB) SaveMessageInRoomContext(ctx context.Context, room, username, cont
 
 	return &Message{
 		ID:        id,
+		UserID:    userID,
 		Username:  username,
 		Content:   content,
 		Type:      msgType,
@@ -305,6 +323,11 @@ func (db *DB) SaveModerationEvent(sessionID, username, reason, content string) (
 
 // SaveModerationEventContext records an audit event with a caller-controlled context.
 func (db *DB) SaveModerationEventContext(ctx context.Context, sessionID, username, reason, content string) (*ModerationEvent, error) {
+	return db.SaveModerationEventForUserContext(ctx, sessionID, "", username, reason, content)
+}
+
+// SaveModerationEventForUserContext records a rejected input with its authenticated user when available.
+func (db *DB) SaveModerationEventForUserContext(ctx context.Context, sessionID, userID, username, reason, content string) (*ModerationEvent, error) {
 	contentPreview := truncateRunes(content, maxAuditPreviewRunes)
 	contentLength := utf8.RuneCountInString(content)
 	now := time.Now().UTC()
@@ -312,18 +335,19 @@ func (db *DB) SaveModerationEventContext(ctx context.Context, sessionID, usernam
 	stmt, err := db.PrepareContext(ctx, `
 INSERT INTO moderation_audit_log(
 	session_id,
+	user_id,
 	username,
 	reason,
 	content_preview,
 	content_length,
 	timestamp
-) VALUES(?, ?, ?, ?, ?, ?)`)
+) VALUES(?, ?, ?, ?, ?, ?, ?)`)
 	if err != nil {
 		return nil, err
 	}
 	defer func() { _ = stmt.Close() }()
 
-	result, err := stmt.ExecContext(ctx, sessionID, username, reason, contentPreview, contentLength, now)
+	result, err := stmt.ExecContext(ctx, sessionID, userID, username, reason, contentPreview, contentLength, now)
 	if err != nil {
 		return nil, err
 	}
@@ -336,6 +360,7 @@ INSERT INTO moderation_audit_log(
 	return &ModerationEvent{
 		ID:             id,
 		SessionID:      sessionID,
+		UserID:         userID,
 		Username:       username,
 		Reason:         reason,
 		ContentPreview: contentPreview,
@@ -361,7 +386,7 @@ func (db *DB) GetRecentMessagesInRoomContext(ctx context.Context, room string, l
 		return nil, err
 	}
 
-	rows, err := db.QueryContext(ctx, "SELECT id, room, username, content, type, timestamp FROM messages WHERE room = ? ORDER BY timestamp DESC, id DESC LIMIT ?", room, limit)
+	rows, err := db.QueryContext(ctx, "SELECT id, room, user_id, username, content, type, timestamp FROM messages WHERE room = ? ORDER BY timestamp DESC, id DESC LIMIT ?", room, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -371,7 +396,7 @@ func (db *DB) GetRecentMessagesInRoomContext(ctx context.Context, room string, l
 	for rows.Next() {
 		var msg Message
 		var timestamp string
-		if err := rows.Scan(&msg.ID, &msg.Room, &msg.Username, &msg.Content, &msg.Type, &timestamp); err != nil {
+		if err := rows.Scan(&msg.ID, &msg.Room, &msg.UserID, &msg.Username, &msg.Content, &msg.Type, &timestamp); err != nil {
 			return nil, err
 		}
 

@@ -24,10 +24,12 @@ describe('ChatHistory', () => {
   test('labels current user messages as yours', () => {
     render(
       <ChatHistory
+        currentUserID="usr_alice"
         currentUsername="alice"
         chatHistory={[
           {
             id: 1,
+            user_id: 'usr_alice',
             type: 'message',
             username: 'alice',
             content: 'hello',
@@ -39,6 +41,28 @@ describe('ChatHistory', () => {
 
     expect(screen.getByText('You')).toBeInTheDocument();
     expect(screen.getByText('hello')).toBeInTheDocument();
+  });
+
+  test('uses stable user identity instead of a matching display name', () => {
+    render(
+      <ChatHistory
+        currentUserID="usr_alice"
+        currentUsername="Alex"
+        chatHistory={[
+          {
+            id: 1,
+            user_id: 'usr_other',
+            type: 'message',
+            username: 'Alex',
+            content: 'same display name',
+            timestamp: '2026-06-24T09:00:00Z',
+          },
+        ]}
+      />
+    );
+
+    expect(screen.queryByText('You')).not.toBeInTheDocument();
+    expect(screen.getByText('Alex')).toBeInTheDocument();
   });
 
   test('keeps the scrollable message history keyboard reachable', async () => {

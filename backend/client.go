@@ -30,19 +30,22 @@ const (
 
 // Client represents a connected client.
 type Client struct {
-	ID         string
-	Conn       *websocket.Conn
-	Username   string
-	Room       string
-	Hub        *Hub
-	writeMu    sync.Mutex // gorilla/websocket allows one writer at a time
-	usernameMu sync.RWMutex
-	msgLimiter *rate.Limiter
-	send       chan Message
-	done       chan struct{}
-	closeOnce  sync.Once
-	traceCtx   context.Context
-	traceSpan  trace.Span
+	ID            string
+	UserID        string
+	Conn          *websocket.Conn
+	Username      string
+	Authenticated bool
+	AuthExpiresAt time.Time
+	Room          string
+	Hub           *Hub
+	writeMu       sync.Mutex // gorilla/websocket allows one writer at a time
+	usernameMu    sync.RWMutex
+	msgLimiter    *rate.Limiter
+	send          chan Message
+	done          chan struct{}
+	closeOnce     sync.Once
+	traceCtx      context.Context
+	traceSpan     trace.Span
 }
 
 func (c *Client) writeJSON(v any) error {
@@ -158,7 +161,7 @@ func (c *Client) auditRejectedMessage(reason, content string) {
 		attribute.String("chatster.moderation.reason", reason),
 	)
 	defer span.End()
-	if _, err := c.Hub.database.SaveModerationEventContext(ctx, c.ID, c.username(), reason, content); err != nil {
+	if _, err := c.Hub.database.SaveModerationEventForUserContext(ctx, c.ID, c.UserID, c.username(), reason, content); err != nil {
 		telemetry.MarkError(span)
 		slog.Warn("save moderation audit event", "err", err, "reason", reason, "session_id", c.ID)
 	}
@@ -218,12 +221,12 @@ func (c *Client) readMessages() {
 	}()
 
 	c.Conn.SetReadLimit(maxWebSocketReadBytes)
-	if err := c.Conn.SetReadDeadline(time.Now().Add(pongWait)); err != nil {
+	if err := c.Conn.SetReadDeadline(c.nextReadDeadline()); err != nil {
 		slog.Warn("set read deadline", "err", err)
 		return
 	}
 	c.Conn.SetPongHandler(func(string) error {
-		return c.Conn.SetReadDeadline(time.Now().Add(pongWait))
+		return c.Conn.SetReadDeadline(c.nextReadDeadline())
 	})
 
 	for {
@@ -237,6 +240,12 @@ func (c *Client) readMessages() {
 		}
 
 		if msg.Type == "username" {
+			if c.Authenticated {
+				metrics.MessagesRejected.WithLabelValues("identity_override").Inc()
+				c.auditRejectedMessage("identity_override", msg.Content)
+				slog.Warn("authenticated identity override rejected", "session_id", c.ID)
+				continue
+			}
 			name := strings.TrimSpace(msg.Content)
 			if !validUsername(name) {
 				metrics.MessagesRejected.WithLabelValues("invalid_username").Inc()
@@ -266,10 +275,11 @@ func (c *Client) readMessages() {
 			continue
 		}
 		msg.Content = body
+		msg.UserID = c.UserID
 		msg.Username = c.username()
 		msg.Room = c.room()
 
-		dbMsg, err := saveMessageObservedInRoomContext(c.traceContext(), c.Hub.database, msg.Room, msg.Username, msg.Content, msg.Type)
+		dbMsg, err := saveMessageObservedForUserInRoomContext(c.traceContext(), c.Hub.database, msg.Room, msg.UserID, msg.Username, msg.Content, msg.Type)
 		if err != nil {
 			slog.Warn("save message", "err", err)
 		} else {
@@ -282,6 +292,14 @@ func (c *Client) readMessages() {
 			return
 		}
 	}
+}
+
+func (c *Client) nextReadDeadline() time.Time {
+	deadline := time.Now().Add(pongWait)
+	if !c.AuthExpiresAt.IsZero() && c.AuthExpiresAt.Before(deadline) {
+		return c.AuthExpiresAt
+	}
+	return deadline
 }
 
 func newMessageLimiter(cfg config.Config) *rate.Limiter {

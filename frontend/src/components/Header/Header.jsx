@@ -22,6 +22,9 @@ const Header = ({
   onRoomChange = () => {},
   room = 'general',
   roomOptions = ROOM_OPTIONS,
+  identity,
+  onLogout,
+  logoutDisabled = false,
 }) => {
   const live = connectionStatus === 'connected';
 
@@ -33,20 +36,28 @@ const Header = ({
           <p className="header-sub">WebSocket · SQLite</p>
         </div>
         <div className="header-controls">
-          <label className="room-picker">
-            <span className="visually-hidden">Chat room</span>
-            <select
-              aria-label="Chat room"
-              value={room}
-              onChange={(event) => onRoomChange(event.target.value)}
-            >
-              {roomOptions.map((option) => (
-                <option key={option} value={option}>
-                  {roomLabel(option)}
-                </option>
-              ))}
-            </select>
-          </label>
+          {identity && (
+            <div className="header-identity">
+              <span>{identity}</span>
+              <button type="button" onClick={onLogout} disabled={logoutDisabled}>Sign out</button>
+            </div>
+          )}
+          {roomOptions.length > 0 && (
+            <label className="room-picker">
+              <span className="visually-hidden">Chat room</span>
+              <select
+                aria-label="Chat room"
+                value={room}
+                onChange={(event) => onRoomChange(event.target.value)}
+              >
+                {roomOptions.map((option) => (
+                  <option key={option} value={option}>
+                    {roomLabel(option)}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
           <div className={`header-status ${live ? 'is-live' : 'is-muted'}`}>
             <span className="header-status-dot" aria-hidden />
             <span className="header-status-text">{statusLabel(connectionStatus)}</span>

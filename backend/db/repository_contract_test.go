@@ -20,19 +20,20 @@ func TestRepositoryContractSQLite(t *testing.T) {
 	runRepositoryContract(t, database, func(t *testing.T, event *ModerationEvent) {
 		var (
 			sessionID      string
+			userID         string
 			username       string
 			reason         string
 			contentPreview string
 			contentLength  int
 		)
 		if err := database.QueryRow(`
-SELECT session_id, username, reason, content_preview, content_length
+SELECT session_id, user_id, username, reason, content_preview, content_length
 FROM moderation_audit_log WHERE id = ?`, event.ID).
-			Scan(&sessionID, &username, &reason, &contentPreview, &contentLength); err != nil {
+			Scan(&sessionID, &userID, &username, &reason, &contentPreview, &contentLength); err != nil {
 			t.Fatalf("read SQLite audit event: %v", err)
 		}
-		if sessionID != event.SessionID || username != event.Username || reason != event.Reason || contentPreview != event.ContentPreview || contentLength != event.ContentLength {
-			t.Fatalf("SQLite audit row mismatch: got %q/%q/%q/%q/%d, want %#v", sessionID, username, reason, contentPreview, contentLength, event)
+		if sessionID != event.SessionID || userID != event.UserID || username != event.Username || reason != event.Reason || contentPreview != event.ContentPreview || contentLength != event.ContentLength {
+			t.Fatalf("SQLite audit row mismatch: got %q/%q/%q/%q/%q/%d, want %#v", sessionID, userID, username, reason, contentPreview, contentLength, event)
 		}
 	})
 }
@@ -45,19 +46,20 @@ func TestRepositoryContractPostgres(t *testing.T) {
 		defer cancel()
 		var (
 			sessionID      string
+			userID         string
 			username       string
 			reason         string
 			contentPreview string
 			contentLength  int
 		)
 		if err := database.pool.QueryRow(ctx, `
-SELECT session_id, username, reason, content_preview, content_length
+SELECT session_id, user_id, username, reason, content_preview, content_length
 FROM moderation_audit_log WHERE id = $1`, event.ID).
-			Scan(&sessionID, &username, &reason, &contentPreview, &contentLength); err != nil {
+			Scan(&sessionID, &userID, &username, &reason, &contentPreview, &contentLength); err != nil {
 			t.Fatalf("read Postgres audit event: %v", err)
 		}
-		if sessionID != event.SessionID || username != event.Username || reason != event.Reason || contentPreview != event.ContentPreview || contentLength != event.ContentLength {
-			t.Fatalf("Postgres audit row mismatch: got %q/%q/%q/%q/%d, want %#v", sessionID, username, reason, contentPreview, contentLength, event)
+		if sessionID != event.SessionID || userID != event.UserID || username != event.Username || reason != event.Reason || contentPreview != event.ContentPreview || contentLength != event.ContentLength {
+			t.Fatalf("Postgres audit row mismatch: got %q/%q/%q/%q/%q/%d, want %#v", sessionID, userID, username, reason, contentPreview, contentLength, event)
 		}
 	})
 
@@ -124,7 +126,7 @@ func runRepositoryContract(t *testing.T, repository Repository, verifyAudit func
 
 	room := fmt.Sprintf("contract-%d", time.Now().UnixNano()%1_000_000_000)
 	otherRoom := room + "-other"
-	first, err := repository.SaveMessageInRoomContext(ctx, room, "alice", "first", "message")
+	first, err := repository.SaveMessageForUserInRoomContext(ctx, room, "usr_alice", "alice", "first", "message")
 	if err != nil {
 		t.Fatalf("save first message: %v", err)
 	}
@@ -134,6 +136,9 @@ func runRepositoryContract(t *testing.T, repository Repository, verifyAudit func
 	}
 	if first.ID < 1 || second.ID < 1 || first.Timestamp.IsZero() || second.Timestamp.IsZero() {
 		t.Fatalf("persisted messages need IDs and timestamps: first=%#v second=%#v", first, second)
+	}
+	if first.UserID != "usr_alice" || second.UserID != "" {
+		t.Fatalf("stable user identity should be optional and preserved: first=%#v second=%#v", first, second)
 	}
 
 	if _, err := repository.SaveMessageInRoomContext(ctx, otherRoom, "carol", "other room", "message"); err != nil {
@@ -148,6 +153,9 @@ func runRepositoryContract(t *testing.T, repository Repository, verifyAudit func
 	}
 	if history[0].Room != room || history[1].Room != room {
 		t.Fatalf("room history contains the wrong room: %#v", history)
+	}
+	if history[0].UserID != "usr_alice" || history[1].UserID != "" {
+		t.Fatalf("room history lost stable user identity: %#v", history)
 	}
 
 	otherHistory, err := repository.GetRecentMessagesInRoomContext(ctx, otherRoom, 10)
@@ -174,12 +182,15 @@ func runRepositoryContract(t *testing.T, repository Repository, verifyAudit func
 	}
 
 	content := strings.Repeat("é", maxAuditPreviewRunes+4)
-	event, err := repository.SaveModerationEventContext(ctx, "sess_contract", "alice", "invalid_body", content)
+	event, err := repository.SaveModerationEventForUserContext(ctx, "sess_contract", "usr_alice", "alice", "invalid_body", content)
 	if err != nil {
 		t.Fatalf("save moderation event: %v", err)
 	}
 	if event.ContentLength != maxAuditPreviewRunes+4 || len([]rune(event.ContentPreview)) != maxAuditPreviewRunes {
 		t.Fatalf("audit metadata: %#v", event)
+	}
+	if event.UserID != "usr_alice" {
+		t.Fatalf("audit event lost stable user identity: %#v", event)
 	}
 	verifyAudit(t, event)
 

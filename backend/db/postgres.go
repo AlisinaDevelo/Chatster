@@ -66,6 +66,15 @@ ALTER TABLE messages ADD COLUMN IF NOT EXISTS room TEXT NOT NULL DEFAULT 'genera
 CREATE INDEX IF NOT EXISTS idx_messages_room_timestamp
 	ON messages(room, timestamp);`,
 	},
+	{
+		version: 6,
+		name:    "bind_message_and_audit_user_ids",
+		sql: `
+ALTER TABLE messages ADD COLUMN IF NOT EXISTS user_id TEXT NOT NULL DEFAULT '';
+ALTER TABLE moderation_audit_log ADD COLUMN IF NOT EXISTS user_id TEXT NOT NULL DEFAULT '';
+CREATE INDEX IF NOT EXISTS idx_messages_user_id_timestamp
+	ON messages(user_id, timestamp) WHERE user_id <> '';`,
+	},
 }
 
 const postgresMigrationLockSQL = `
@@ -177,12 +186,18 @@ func (db *PostgresDB) SaveMessageInRoom(room, username, content, msgType string)
 
 // SaveMessageInRoomContext saves a message for a validated room with a caller context.
 func (db *PostgresDB) SaveMessageInRoomContext(ctx context.Context, room, username, content, msgType string) (*Message, error) {
+	return db.SaveMessageForUserInRoomContext(ctx, room, "", username, content, msgType)
+}
+
+// SaveMessageForUserInRoomContext saves a message with stable identity separate from its display name.
+func (db *PostgresDB) SaveMessageForUserInRoomContext(ctx context.Context, room, userID, username, content, msgType string) (*Message, error) {
 	room, err := NormalizeRoom(room)
 	if err != nil {
 		return nil, err
 	}
 	if msgType == "username" {
 		return &Message{
+			UserID:    userID,
 			Username:  username,
 			Content:   content,
 			Type:      msgType,
@@ -193,12 +208,13 @@ func (db *PostgresDB) SaveMessageInRoomContext(ctx context.Context, room, userna
 
 	var message Message
 	if err := db.pool.QueryRow(ctx, `
-INSERT INTO messages(room, username, content, type)
-VALUES($1, $2, $3, $4)
-RETURNING id, timestamp`, room, username, content, msgType).Scan(&message.ID, &message.Timestamp); err != nil {
+INSERT INTO messages(room, user_id, username, content, type)
+VALUES($1, $2, $3, $4, $5)
+RETURNING id, timestamp`, room, userID, username, content, msgType).Scan(&message.ID, &message.Timestamp); err != nil {
 		return nil, err
 	}
 	message.Username = username
+	message.UserID = userID
 	message.Content = content
 	message.Type = msgType
 	message.Room = room
@@ -241,8 +257,14 @@ func (db *PostgresDB) SaveModerationEvent(sessionID, username, reason, content s
 
 // SaveModerationEventContext records an audit event with a caller context.
 func (db *PostgresDB) SaveModerationEventContext(ctx context.Context, sessionID, username, reason, content string) (*ModerationEvent, error) {
+	return db.SaveModerationEventForUserContext(ctx, sessionID, "", username, reason, content)
+}
+
+// SaveModerationEventForUserContext records a rejected input with its authenticated user when available.
+func (db *PostgresDB) SaveModerationEventForUserContext(ctx context.Context, sessionID, userID, username, reason, content string) (*ModerationEvent, error) {
 	event := ModerationEvent{
 		SessionID:      sessionID,
+		UserID:         userID,
 		Username:       username,
 		Reason:         reason,
 		ContentPreview: truncateRunes(content, maxAuditPreviewRunes),
@@ -250,10 +272,10 @@ func (db *PostgresDB) SaveModerationEventContext(ctx context.Context, sessionID,
 	}
 	if err := db.pool.QueryRow(ctx, `
 INSERT INTO moderation_audit_log(
-	session_id, username, reason, content_preview, content_length
+	session_id, user_id, username, reason, content_preview, content_length
 )
-VALUES($1, $2, $3, $4, $5)
-RETURNING id, timestamp`, event.SessionID, event.Username, event.Reason, event.ContentPreview, event.ContentLength).Scan(&event.ID, &event.Timestamp); err != nil {
+VALUES($1, $2, $3, $4, $5, $6)
+RETURNING id, timestamp`, event.SessionID, event.UserID, event.Username, event.Reason, event.ContentPreview, event.ContentLength).Scan(&event.ID, &event.Timestamp); err != nil {
 		return nil, err
 	}
 	event.Timestamp = event.Timestamp.UTC()
@@ -278,7 +300,7 @@ func (db *PostgresDB) GetRecentMessagesInRoomContext(ctx context.Context, room s
 	}
 
 	rows, err := db.pool.Query(ctx, `
-SELECT id, room, username, content, type, timestamp
+SELECT id, room, user_id, username, content, type, timestamp
 FROM messages
 WHERE room = $1
 ORDER BY timestamp DESC, id DESC
@@ -291,7 +313,7 @@ LIMIT $2`, room, limit)
 	messages := make([]Message, 0)
 	for rows.Next() {
 		var message Message
-		if err := rows.Scan(&message.ID, &message.Room, &message.Username, &message.Content, &message.Type, &message.Timestamp); err != nil {
+		if err := rows.Scan(&message.ID, &message.Room, &message.UserID, &message.Username, &message.Content, &message.Type, &message.Timestamp); err != nil {
 			return nil, err
 		}
 		message.Timestamp = message.Timestamp.UTC()

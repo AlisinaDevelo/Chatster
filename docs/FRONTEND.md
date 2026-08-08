@@ -7,7 +7,7 @@ The UI is a **Vite + React** SPA: strong focus on **clarity, accessibility, and 
 | Area | Stance |
 |------|--------|
 | **State** | Local React state + WebSocket callbacks—appropriate for a single-screen chat without global client stores. The active room is mirrored in `/rooms/<name>`. |
-| **Data fetching** | Room-aware WebSocket events plus `GET /api/messages?room=...` for initial load and reconnect catch-up. |
+| **Data fetching** | `GET /api/session` discovery, room-aware WebSocket events, and credentialed `GET /api/messages?room=...` for initial load and reconnect catch-up. |
 | **Build tooling** | Vite 8 with the output directory kept at `build/` for the Go server and container image. |
 
 ## Accessibility (a11y)
@@ -18,12 +18,12 @@ Implemented practices include:
 - **Live region:** message list uses `role="log"` and `aria-live="polite"` so assistive tech is notified of new messages (tunable if volume becomes noisy).
 - **Keyboard scrolling:** the scrollable message log is tabbable and exposes a visible focus ring, so keyboard users can enter and scroll the history directly.
 - **Announcement preference:** the **Quiet updates** checkbox persists locally and switches the message log to `aria-live="off"` for high-traffic rooms.
-- **Room navigation:** the header exposes a labeled native select for the active room, with URL state and reconnect/history behavior kept in sync.
+- **Room navigation:** the header exposes only server-granted rooms in session mode, including valid rooms outside the anonymous demo presets, with URL state and reconnect/history behavior kept in sync.
 - **Forms:** visible labels (or visually hidden where design uses placeholders), `aria-describedby` for hints, submit disabled when disconnected.
 - **Motion:** global `prefers-reduced-motion` respected in styles (see `index.css` / component SCSS).
 - **Automated checks:** the rendered app runs an axe-core accessibility smoke test in `App.test.jsx`, which executes in the normal Vitest/CI path. Playwright separately covers the real-browser chat workflow; it does not replace the accessibility check.
 
-**Next steps:** validate the interaction across a browser/device matrix and consider list virtualization for very long sessions.
+**Next steps:** validate the interaction across a browser/device matrix and add paginated history if rooms outgrow the current 50-message reconnect window.
 
 ## Performance budget (guidance)
 
@@ -60,7 +60,7 @@ rooms and future pagination.
 
 ## Testing
 
-- **Vitest + Testing Library** for components, room routing, room-aware history requests, and mocked WebSocket `api` module.
+- **Vitest + Testing Library** for components, session login/logout, stable-ID ownership, room routing, room-aware history requests, and the mocked WebSocket `api` module.
 - Long-history component coverage verifies the virtual window still exposes a tabbable
   `role="log"`, rendered message content, timestamps, and ownership styling.
 - **Browser workflow smoke:** `npm run test:e2e` runs Chromium, Firefox, and WebKit locally after `npx playwright install`. CI runs the Chromium project on every push and stores the HTML report plus failure trace/screenshot/video artifacts. The matrix currently covers desktop engines only; mobile browsers, real assistive technology, and device farms remain outside this smoke path.
@@ -68,4 +68,7 @@ rooms and future pagination.
 ## Security (client)
 
 - WebSocket URL from **`VITE_WS_URL`** in production builds—avoid hardcoding internal hosts.
-- No secrets in the bundle; treat usernames as **non-sensitive display names** unless you add real auth.
+- Access tokens exist only in the password input long enough to call `POST /api/session`; they are never written to URLs, web storage, or the bundle.
+- The signed session is an `HttpOnly` cookie, so frontend code can request credentialed HTTP/WebSocket access without reading the cookie value.
+- Development API/WebSocket defaults reuse the page hostname so strict cookies remain same-site across the Vite and Go ports.
+- In anonymous mode, usernames remain untrusted presentation strings. In session mode, ownership styling uses the server-issued stable `user_id` rather than display-name equality.

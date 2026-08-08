@@ -8,6 +8,7 @@ Items **intentionally out of scope** for this reference repository. They may be 
 - **Full-text search** and archival cold storage tiers.
 - **Federation** (ActivityPub, XMPP bridges).
 - **AI features** (moderation models, bots) beyond optional future hooks.
+- **Self-service accounts and enterprise identity federation**; the opt-in session mode uses operator-provisioned tokens, while OIDC remains a future integration.
 - **Replacing Vite** with a larger frontend framework without a concrete product need.
 
 When a non-goal moves in-scope, add an **ADR** and update this list.

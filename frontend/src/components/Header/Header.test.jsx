@@ -34,4 +34,21 @@ describe('Header', () => {
 
     expect(onRoomChange).toHaveBeenCalledWith('engineering');
   });
+
+  test('shows authenticated identity and exposes logout', async () => {
+    const user = userEvent.setup();
+    const onLogout = vi.fn();
+
+    render(
+      <Header
+        connectionStatus="connected"
+        identity="Alice"
+        onLogout={onLogout}
+      />
+    );
+
+    expect(screen.getByText('Alice')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /sign out/i }));
+    expect(onLogout).toHaveBeenCalledOnce();
+  });
 });

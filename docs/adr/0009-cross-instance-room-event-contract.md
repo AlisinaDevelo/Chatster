@@ -28,6 +28,7 @@ compatibility example.
   "timestamp": "2026-08-06T10:00:00Z",
   "message": {
     "id": 42,
+    "user_id": "usr_alice",
     "username": "alice",
     "content": "hello from the room",
     "type": "message"
@@ -45,7 +46,7 @@ compatibility example.
 | `room` | Canonical Chatster room name. It is duplicated in the channel path and validated before delivery. |
 | `origin_instance` | Stable, log-safe instance ID for the process lifetime. It is configured with `CHATSTER_INSTANCE_ID` or generated at startup; duplicate configured IDs are an operator error. |
 | `timestamp` | UTC persistence timestamp from the repository, not a subscriber or broker receive time. |
-| `message` | Durable message payload: positive storage ID, username, content, and message type. Handshake/system notifications are never broker events. |
+| `message` | Durable message payload: positive storage ID, optional stable `user_id`, username, content, and message type. The additive user ID preserves authenticated ownership across instances; anonymous and system rows omit it. Handshake messages are never broker events. |
 
 ### Channel and delivery rules
 

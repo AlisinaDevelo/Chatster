@@ -2,7 +2,8 @@
 
 Chatster's current release baseline is a room-scoped chat service with SQLite history,
 bounded WebSocket fan-out, graceful shutdown, opt-in tracing, Postgres repository
-contracts, browser smoke coverage, and long-history virtualization. The remaining work is
+contracts, optional signed-session authorization, browser smoke coverage, and long-history
+virtualization. The remaining work is
 split between public-demo proof and optional platform extensions.
 
 ## Immediate execution order
@@ -14,13 +15,15 @@ split between public-demo proof and optional platform extensions.
 2. **Keep the single-node boundary honest**: retain one Render instance and the persistent
    `/data` disk while SQLite and the in-memory WebSocket hub are the active defaults.
 3. **Reassess before scaling**: use the production demo's traffic and operational evidence
-   to decide whether authentication, Postgres, and cross-instance fan-out are justified.
+   to decide whether the implemented opt-in authentication, Postgres, and cross-instance
+   fan-out modes should be enabled in a specific deployment.
 
 ## Optional platform tracks
 
 - **Authentication** ([issue #28](https://github.com/AlisinaDevelo/Chatster/issues/28)):
-  choose and document the trust boundary before binding identities to sessions or room
-  authorization. Anonymous demo access remains an explicit scope decision.
+  implemented as an opt-in signed-session boundary with stable user IDs and server-enforced
+  room grants. Anonymous demo access remains the explicit default; OIDC and selective
+  immediate revocation are future extensions.
 - **Redis fan-out** ([issue #27](https://github.com/AlisinaDevelo/Chatster/issues/27)):
   implemented as an opt-in, namespaced live transport with CI-backed multi-instance coverage.
   Redis Pub/Sub is live fan-out, not durable replay; reconnect history remains the catch-up path.

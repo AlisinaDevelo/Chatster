@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"net/http"
 	"os"
@@ -10,16 +11,39 @@ import (
 	"time"
 
 	"github.com/AliSinaDevelo/Chatster/db"
+	"github.com/AliSinaDevelo/Chatster/internal/auth"
 	"github.com/AliSinaDevelo/Chatster/internal/broker"
 	"github.com/AliSinaDevelo/Chatster/internal/config"
 	"github.com/AliSinaDevelo/Chatster/internal/metrics"
 	"github.com/AliSinaDevelo/Chatster/internal/telemetry"
 )
 
+func newAuthService(cfg config.Config) (*auth.Service, error) {
+	service, err := auth.New(auth.Config{
+		Mode:            cfg.AuthMode,
+		SessionSecret:   cfg.SessionSecret,
+		CredentialsJSON: cfg.AuthUsersJSON,
+		SessionTTL:      cfg.SessionTTL,
+		CookieSecure:    cfg.SessionCookieSecure,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if service.Mode() == auth.ModeSession && len(cfg.AllowedOrigins) == 0 {
+		return nil, errors.New("CHATSTER_ALLOWED_ORIGINS is required in session mode")
+	}
+	return service, nil
+}
+
 func main() {
 	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo})))
 
 	cfg := config.FromEnv()
+	authService, err := newAuthService(cfg)
+	if err != nil {
+		slog.Error("auth init failed", "err", err)
+		os.Exit(1)
+	}
 
 	shutdownTelemetry, telemetryEnabled, err := telemetry.Setup(context.Background())
 	if err != nil {
@@ -100,7 +124,7 @@ func main() {
 	go hub.run()
 	hub.startBroker()
 
-	handler := mount(cfg, hub, repository)
+	handler := mountWithAuth(cfg, hub, repository, authService)
 
 	srv := &http.Server{
 		Addr:    cfg.HTTPAddr,
@@ -108,7 +132,7 @@ func main() {
 	}
 
 	go func() {
-		slog.Info("server starting", "addr", cfg.HTTPAddr, "storage", cfg.Storage)
+		slog.Info("server starting", "addr", cfg.HTTPAddr, "storage", cfg.Storage, "auth_mode", authService.Mode())
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			slog.Error("listen", "err", err)
 			os.Exit(1)

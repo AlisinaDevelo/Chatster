@@ -6,6 +6,8 @@ export const ROOM_OPTIONS = [
   'off-topic',
 ];
 
+const roomPattern = /^[a-z0-9][a-z0-9_-]{0,31}$/;
+
 export function roomFromPath(pathname = window.location.pathname) {
   const match = pathname.match(/^\/rooms\/([^/]+)\/?$/);
   if (!match) {
@@ -13,8 +15,8 @@ export function roomFromPath(pathname = window.location.pathname) {
   }
 
   try {
-    const room = decodeURIComponent(match[1]);
-    return ROOM_OPTIONS.includes(room) ? room : DEFAULT_ROOM;
+    const room = decodeURIComponent(match[1]).trim().toLowerCase();
+    return roomPattern.test(room) ? room : DEFAULT_ROOM;
   } catch {
     return DEFAULT_ROOM;
   }

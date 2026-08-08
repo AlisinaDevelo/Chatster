@@ -20,8 +20,10 @@ const (
 // Concrete backends own their driver, migrations, and connection lifecycle.
 type Repository interface {
 	SaveMessageInRoomContext(ctx context.Context, room, username, content, msgType string) (*Message, error)
+	SaveMessageForUserInRoomContext(ctx context.Context, room, userID, username, content, msgType string) (*Message, error)
 	GetRecentMessagesInRoomContext(ctx context.Context, room string, limit int) ([]Message, error)
 	SaveModerationEventContext(ctx context.Context, sessionID, username, reason, content string) (*ModerationEvent, error)
+	SaveModerationEventForUserContext(ctx context.Context, sessionID, userID, username, reason, content string) (*ModerationEvent, error)
 	PruneMessagesBeforeContext(ctx context.Context, cutoff time.Time) (int64, error)
 	PruneModerationEventsBeforeContext(ctx context.Context, cutoff time.Time) (int64, error)
 	PingContext(ctx context.Context) error

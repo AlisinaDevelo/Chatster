@@ -13,7 +13,12 @@ Runbook-style notes for operating Chatster beyond local development.
 | `CHATSTER_POSTGRES_MIN_CONNS` | `2` | Postgres pool minimum; positive values only |
 | `CHATSTER_POSTGRES_MAX_CONNS` | `10` | Postgres pool maximum; must be at least the minimum |
 | `CHATSTER_STATIC_DIR` | _(empty)_ | Optional built frontend directory served by the Go backend |
-| `CHATSTER_ALLOWED_ORIGINS` | _(empty)_ | Comma-separated WebSocket `Origin` values; empty allows all origins |
+| `CHATSTER_ALLOWED_ORIGINS` | _(empty)_ | HTTP/WebSocket `Origin` allowlist; required in session mode, empty allows all in anonymous mode |
+| `CHATSTER_AUTH_MODE` | `anonymous` | Authentication boundary: public display-name demo or required signed sessions |
+| `CHATSTER_SESSION_SECRET` | _(required in session mode)_ | HMAC signing key of at least 32 bytes; never logged |
+| `CHATSTER_AUTH_USERS_JSON` | _(required in session mode)_ | Secret 32-512 byte token-to-user records with at most 64 room grants; never logged |
+| `CHATSTER_SESSION_TTL` | `1h` | Session lifetime, accepted range `1m` through `24h` |
+| `CHATSTER_SESSION_COOKIE_SECURE` | `true` | Set `false` only for local HTTP session testing |
 | `CHATSTER_WS_UPGRADE_RPS` | `5` | Per-IP WebSocket upgrades per second (`0` disables) |
 | `CHATSTER_WS_UPGRADE_BURST` | `10` | Burst size for the upgrade limiter |
 | `CHATSTER_MESSAGE_RPS` | `5` | Per-client chat messages per second (`0` disables) |
@@ -57,6 +62,21 @@ Example:
 ```
 
 Use this endpoint for Kubernetes liveness/readiness or load balancer probes.
+
+## Session operations
+
+`GET /api/session` reports the current auth mode and browser session state without returning
+credentials. In session mode, `POST /api/session` exchanges an operator-provisioned bearer
+token for the signed cookie, and `DELETE /api/session` logs out by expiring that cookie.
+History and WebSocket room access return `401` for missing, invalid, or expired sessions and
+`403` when the signed principal lacks the requested room grant.
+
+Sessions are stateless. Removing an access token prevents new logins but does not revoke an
+already issued cookie. Rotate `CHATSTER_SESSION_SECRET` to revoke every session immediately,
+or wait for the configured short TTL. A server-side session store is required for selective
+immediate revocation. Cookie signing secrets and provisioned tokens must stay in the platform
+secret manager and out of logs, diagnostics, and shell history.
+Configure edge and reverse-proxy access logs to redact `Authorization` and `Cookie` headers.
 
 ## Metrics
 
@@ -135,5 +155,6 @@ it into a disposable database before a production rollback.
 - For Postgres, require TLS hostname verification (`sslmode=verify-full`) and keep the CA,
   username, and password outside committed files and logs.
 - Set **`CHATSTER_ALLOWED_ORIGINS`** to match your static app origins (see [THREAT_MODEL.md](THREAT_MODEL.md)).
+- Keep session cookies `Secure`, use short expiries, and rotate provisioned tokens and the signing secret through the host's secret manager.
 - Run the API as a non-root user (Dockerfile already uses a dedicated user).
 - Monitor `/health`, **`/metrics`**, log volume, and DB disk growth.

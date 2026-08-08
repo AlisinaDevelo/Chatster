@@ -21,6 +21,9 @@ func TestFixtureIsValid(t *testing.T) {
 	if err := envelope.Validate(); err != nil {
 		t.Fatalf("validate fixture: %v", err)
 	}
+	if envelope.Message.UserID != "usr_alice" {
+		t.Fatalf("fixture stable user ID: got %q", envelope.Message.UserID)
+	}
 
 	channel, err := Channel("production", envelope.Room)
 	if err != nil {
@@ -35,6 +38,7 @@ func TestNewNormalizesTimestampToUTC(t *testing.T) {
 	timestamp := time.Date(2026, time.August, 6, 12, 0, 0, 0, time.FixedZone("test", 2*60*60))
 	envelope, err := New("event-1", "general", "instance-a", Message{
 		ID:       42,
+		UserID:   "usr_alice",
 		Username: "alice",
 		Content:  "hello",
 		Type:     "message",
@@ -47,6 +51,9 @@ func TestNewNormalizesTimestampToUTC(t *testing.T) {
 	}
 	if !envelope.Timestamp.Equal(timestamp) {
 		t.Fatalf("timestamp: got %s want %s", envelope.Timestamp, timestamp)
+	}
+	if envelope.Message.UserID != "usr_alice" {
+		t.Fatalf("stable user ID: got %q", envelope.Message.UserID)
 	}
 }
 
@@ -74,6 +81,7 @@ func TestValidateRejectsUnsafeOrNondurableEvents(t *testing.T) {
 		{name: "noncanonical room", mutate: func(e *Envelope) { e.Room = "General" }},
 		{name: "unsafe origin", mutate: func(e *Envelope) { e.OriginInstance = "prod:1" }},
 		{name: "zero message ID", mutate: func(e *Envelope) { e.Message.ID = 0 }},
+		{name: "unsafe user ID", mutate: func(e *Envelope) { e.Message.UserID = "user/id" }},
 		{name: "username notification", mutate: func(e *Envelope) { e.Message.Type = "username" }},
 	}
 

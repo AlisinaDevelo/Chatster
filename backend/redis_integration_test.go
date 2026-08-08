@@ -105,6 +105,7 @@ func TestRedisFanoutAcrossInstances(t *testing.T) {
 	duplicateContent := fmt.Sprintf("duplicate-%d", time.Now().UnixNano())
 	event, err := events.New("duplicate-event", "general", fanoutA.InstanceID(), events.Message{
 		ID:       time.Now().UnixNano(),
+		UserID:   "usr_alice",
 		Username: "alice",
 		Content:  duplicateContent,
 		Type:     "message",
@@ -122,8 +123,12 @@ func TestRedisFanoutAcrossInstances(t *testing.T) {
 		t.Fatalf("publish second duplicate event: %v", err)
 	}
 	cancel()
-	if !redisTestReadsContent(generalB, duplicateContent, 3*time.Second) {
+	received, ok := redisTestReadContent(generalB, duplicateContent, 3*time.Second)
+	if !ok {
 		t.Fatalf("instance B did not receive duplicate test event")
+	}
+	if received.UserID != "usr_alice" {
+		t.Fatalf("instance B lost stable user identity: %#v", received)
 	}
 	if redisTestReadsContent(generalB, duplicateContent, 500*time.Millisecond) {
 		t.Fatalf("duplicate event was delivered twice")
@@ -182,15 +187,20 @@ func closeRedisTestWS(connection *websocket.Conn) {
 }
 
 func redisTestReadsContent(connection *websocket.Conn, content string, timeout time.Duration) bool {
+	_, ok := redisTestReadContent(connection, content, timeout)
+	return ok
+}
+
+func redisTestReadContent(connection *websocket.Conn, content string, timeout time.Duration) (Message, bool) {
 	_ = connection.SetReadDeadline(time.Now().Add(timeout))
 	defer func() { _ = connection.SetReadDeadline(time.Time{}) }()
 	for {
 		var message Message
 		if err := connection.ReadJSON(&message); err != nil {
-			return false
+			return Message{}, false
 		}
 		if message.Content == content {
-			return true
+			return message, true
 		}
 	}
 }

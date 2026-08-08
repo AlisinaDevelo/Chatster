@@ -17,14 +17,14 @@ Namespaces and names follow `chatster_*` where applicable. Inspect `/metrics` on
 | Metric | Type | What it tells you |
 |--------|------|-------------------|
 | `chatster_websocket_clients_connected` | Gauge | Current active WebSocket clients. |
-| `chatster_websocket_upgrades_total{result}` | Counter | Upgrade attempts by outcome: `ok`, `denied_origin`, `rate_limited`, `upgrade_error`, `draining`. |
+| `chatster_websocket_upgrades_total{result}` | Counter | Upgrade attempts by outcome: `ok`, `authentication_required`, `forbidden_room`, `denied_origin`, `rate_limited`, `upgrade_error`, `draining`. |
 | `chatster_websocket_drains_started_total` | Counter | WebSocket hub drain operations started during process shutdown. |
 | `chatster_websocket_drain_duration_seconds` | Histogram | Duration of each WebSocket hub drain operation. |
 | `chatster_websocket_drain_clients_remaining` | Gauge | Client loops that have not reported completion during a drain. |
 | `chatster_websocket_drain_forced_closes_total` | Counter | Clients still active when the shutdown drain deadline expired. |
 | `chatster_websocket_outbound_drops_total{reason}` | Counter | Outbound drops by reason: `slow_client`, `write_error`. |
 | `chatster_chat_messages_ingested_total` | Counter | Valid chat messages accepted for persistence and broadcast. |
-| `chatster_chat_messages_rejected_total{reason}` | Counter | Rejected chat inputs by reason: `invalid_username`, `invalid_body`, `rate_limited`. |
+| `chatster_chat_messages_rejected_total{reason}` | Counter | Rejected chat inputs by reason: `invalid_username`, `invalid_body`, `identity_override`, `rate_limited`. |
 | `chatster_chat_messages_pruned_total` | Counter | Persisted chat messages removed by the startup retention policy. |
 | `chatster_moderation_audit_events_pruned_total` | Counter | Moderation audit events removed by the startup retention policy. |
 | `chatster_chat_message_persist_duration_seconds{result}` | Histogram | Persistence latency for accepted chat/system messages by `ok` / `error`, across the selected repository. |
@@ -85,7 +85,7 @@ adapters:
 | `chatster.storage.moderation_event` | bounded rejection reason | WebSocket session where available |
 | `chatster.websocket.broadcast.enqueue` | normalized room, message type, queue result | message or notification operation |
 
-Message bodies, usernames, session IDs, URLs with query values, secrets, and
+Message bodies, usernames, stable user IDs, session IDs, URLs with query values, access tokens, cookies, secrets, and
 database error strings are intentionally excluded from span attributes and
 statuses. Room names are normalized by the existing database boundary before
 they are used as trace attributes.

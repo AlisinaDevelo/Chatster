@@ -69,6 +69,77 @@
   display: none;
 }
 
+.auth-gate {
+  flex: 1;
+  display: grid;
+  align-content: center;
+  gap: 24px;
+  max-width: 560px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+.auth-gate h2,
+.auth-gate p {
+  margin: 0;
+}
+
+.auth-gate form {
+  display: grid;
+  gap: 10px;
+}
+
+.auth-gate label {
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.auth-gate-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+}
+
+.auth-gate-fields input,
+.auth-gate-fields button {
+  min-height: 44px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font: inherit;
+}
+
+.auth-gate-fields input {
+  min-width: 0;
+  padding: 0 14px;
+  color: var(--text);
+  background: rgba(0, 0, 0, 0.25);
+}
+
+.auth-gate-fields button {
+  padding: 0 18px;
+  color: var(--bg-deep);
+  background: var(--accent);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.auth-gate-fields button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.auth-error {
+  color: var(--warn);
+  font-size: 13px;
+}
+
+@media (max-width: 520px) {
+  .auth-gate-fields {
+    grid-template-columns: 1fr;
+  }
+}
+
 @keyframes pulse-bar {
   0%,
   100% {

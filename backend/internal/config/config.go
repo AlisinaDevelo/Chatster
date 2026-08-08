@@ -5,6 +5,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 )
 
 const (
@@ -20,6 +21,8 @@ const (
 	defaultMessageRetentionDays = 0
 	defaultAuditRetentionDays   = 0
 	defaultRedisNamespace       = "development"
+	defaultAuthMode             = "anonymous"
+	defaultSessionTTL           = time.Hour
 )
 
 // Config holds process configuration loaded from the environment.
@@ -35,6 +38,11 @@ type Config struct {
 	InstanceID              string
 	StaticDir               string
 	AllowedOrigins          []string
+	AuthMode                string
+	SessionSecret           string
+	AuthUsersJSON           string
+	SessionTTL              time.Duration
+	SessionCookieSecure     bool
 	WSUpgradeRPS            float64
 	WSUpgradeBurst          int
 	DisableWSRateLimit      bool
@@ -57,7 +65,12 @@ type Config struct {
 // CHATSTER_REDIS_NAMESPACE — environment namespace for Redis channels (default "development").
 // CHATSTER_INSTANCE_ID — optional process identifier for loop prevention; generated when Redis is enabled and unset.
 // CHATSTER_STATIC_DIR — optional directory of built frontend assets to serve from the backend.
-// CHATSTER_ALLOWED_ORIGINS — comma-separated WebSocket Origin allowlist; empty = allow all (dev-friendly).
+// CHATSTER_ALLOWED_ORIGINS — comma-separated HTTP/WebSocket Origin allowlist; required in session mode.
+// CHATSTER_AUTH_MODE — "anonymous" (default) or opt-in "session" authentication.
+// CHATSTER_SESSION_SECRET — HMAC signing secret, required in session mode; never logged.
+// CHATSTER_AUTH_USERS_JSON — operator-provisioned token/user/room grants, required in session mode; never logged.
+// CHATSTER_SESSION_TTL — signed session lifetime (default 1h; validated by the auth service).
+// CHATSTER_SESSION_COOKIE_SECURE — set false only for local HTTP development (default true).
 // CHATSTER_WS_UPGRADE_RPS — max WS upgrades per IP per second (default 5); "0" disables limiting.
 // CHATSTER_WS_UPGRADE_BURST — token bucket burst for WS upgrades (default 10).
 // CHATSTER_MESSAGE_RPS — max chat messages per client per second (default 5); "0" disables limiting.
@@ -66,21 +79,26 @@ type Config struct {
 // CHATSTER_AUDIT_RETENTION_DAYS — delete moderation audit events older than this many days at startup (default 0 = disabled).
 func FromEnv() Config {
 	cfg := Config{
-		HTTPAddr:         strings.TrimSpace(os.Getenv("CHATSTER_HTTP_ADDR")),
-		DBPath:           strings.TrimSpace(os.Getenv("CHATSTER_DB_PATH")),
-		Storage:          strings.ToLower(strings.TrimSpace(os.Getenv("CHATSTER_STORAGE"))),
-		PostgresDSN:      strings.TrimSpace(os.Getenv("CHATSTER_POSTGRES_DSN")),
-		PostgresMinConns: parsePoolSizeEnv("CHATSTER_POSTGRES_MIN_CONNS", defaultPostgresMinConns),
-		PostgresMaxConns: parsePoolSizeEnv("CHATSTER_POSTGRES_MAX_CONNS", defaultPostgresMaxConns),
-		RedisURL:         strings.TrimSpace(os.Getenv("CHATSTER_REDIS_URL")),
-		RedisNamespace:   strings.TrimSpace(os.Getenv("CHATSTER_REDIS_NAMESPACE")),
-		InstanceID:       strings.TrimSpace(os.Getenv("CHATSTER_INSTANCE_ID")),
-		StaticDir:        strings.TrimSpace(os.Getenv("CHATSTER_STATIC_DIR")),
-		AllowedOrigins:   splitCSV(os.Getenv("CHATSTER_ALLOWED_ORIGINS")),
-		WSUpgradeRPS:     defaultWSUpgradeRPS,
-		WSUpgradeBurst:   defaultWSUpgradeBurst,
-		MessageRPS:       defaultMessageRPS,
-		MessageBurst:     defaultMessageBurst,
+		HTTPAddr:            strings.TrimSpace(os.Getenv("CHATSTER_HTTP_ADDR")),
+		DBPath:              strings.TrimSpace(os.Getenv("CHATSTER_DB_PATH")),
+		Storage:             strings.ToLower(strings.TrimSpace(os.Getenv("CHATSTER_STORAGE"))),
+		PostgresDSN:         strings.TrimSpace(os.Getenv("CHATSTER_POSTGRES_DSN")),
+		PostgresMinConns:    parsePoolSizeEnv("CHATSTER_POSTGRES_MIN_CONNS", defaultPostgresMinConns),
+		PostgresMaxConns:    parsePoolSizeEnv("CHATSTER_POSTGRES_MAX_CONNS", defaultPostgresMaxConns),
+		RedisURL:            strings.TrimSpace(os.Getenv("CHATSTER_REDIS_URL")),
+		RedisNamespace:      strings.TrimSpace(os.Getenv("CHATSTER_REDIS_NAMESPACE")),
+		InstanceID:          strings.TrimSpace(os.Getenv("CHATSTER_INSTANCE_ID")),
+		StaticDir:           strings.TrimSpace(os.Getenv("CHATSTER_STATIC_DIR")),
+		AllowedOrigins:      splitCSV(os.Getenv("CHATSTER_ALLOWED_ORIGINS")),
+		AuthMode:            strings.ToLower(strings.TrimSpace(os.Getenv("CHATSTER_AUTH_MODE"))),
+		SessionSecret:       os.Getenv("CHATSTER_SESSION_SECRET"),
+		AuthUsersJSON:       os.Getenv("CHATSTER_AUTH_USERS_JSON"),
+		SessionTTL:          defaultSessionTTL,
+		SessionCookieSecure: true,
+		WSUpgradeRPS:        defaultWSUpgradeRPS,
+		WSUpgradeBurst:      defaultWSUpgradeBurst,
+		MessageRPS:          defaultMessageRPS,
+		MessageBurst:        defaultMessageBurst,
 	}
 
 	if cfg.HTTPAddr == "" {
@@ -94,6 +112,21 @@ func FromEnv() Config {
 	}
 	if cfg.RedisNamespace == "" {
 		cfg.RedisNamespace = defaultRedisNamespace
+	}
+	if cfg.AuthMode == "" {
+		cfg.AuthMode = defaultAuthMode
+	}
+
+	if raw := strings.TrimSpace(os.Getenv("CHATSTER_SESSION_TTL")); raw != "" {
+		parsed, err := time.ParseDuration(raw)
+		if err != nil {
+			cfg.SessionTTL = -1
+		} else {
+			cfg.SessionTTL = parsed
+		}
+	}
+	if strings.EqualFold(strings.TrimSpace(os.Getenv("CHATSTER_SESSION_COOKIE_SECURE")), "false") {
+		cfg.SessionCookieSecure = false
 	}
 
 	if v := strings.TrimSpace(os.Getenv("CHATSTER_MESSAGE_RETENTION_DAYS")); v != "" {
@@ -181,7 +214,7 @@ func platformHTTPAddr() string {
 	return ":" + strconv.Itoa(portNumber)
 }
 
-// OriginAllowed returns true if the request may open a WebSocket from a browser Origin.
+// OriginAllowed returns true if an HTTP request or WebSocket may use a browser Origin.
 // Empty AllowedOrigins allows any origin (demo default). Missing Origin header is allowed (non-browser clients).
 func (c Config) OriginAllowed(r *http.Request) bool {
 	if len(c.AllowedOrigins) == 0 {

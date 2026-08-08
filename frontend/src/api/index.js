@@ -19,7 +19,8 @@ function defaultWsUrl(room = DEFAULT_ROOM) {
 
   if (buildEnv.DEV) {
     const port = envValue('VITE_WS_PORT', 'REACT_APP_WS_PORT') || '8080';
-    return withRoom(`ws://127.0.0.1:${port}/ws`, room);
+    const host = window.location.hostname || '127.0.0.1';
+    return withRoom(`ws://${host}:${port}/ws`, room);
   }
 
   const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -34,7 +35,8 @@ function defaultApiUrl() {
 
   if (buildEnv.DEV) {
     const port = envValue('VITE_API_PORT', 'REACT_APP_API_PORT') || '8080';
-    return `http://127.0.0.1:${port}`;
+    const host = window.location.hostname || '127.0.0.1';
+    return `http://${host}:${port}`;
   }
 
   return window.location.origin;
@@ -114,11 +116,45 @@ export async function fetchRecentMessages(limit = 50, room = DEFAULT_ROOM) {
     limit: String(limit),
     room,
   });
-  const response = await fetch(`${defaultApiUrl()}/api/messages?${params.toString()}`);
+  const response = await fetch(`${defaultApiUrl()}/api/messages?${params.toString()}`, {
+    credentials: 'include',
+  });
   if (!response.ok) {
     throw new Error(`message history request failed: ${response.status}`);
   }
 
   const payload = await response.json();
   return Array.isArray(payload) ? payload : payload.messages || [];
+}
+
+export async function fetchSession() {
+  const response = await fetch(`${defaultApiUrl()}/api/session`, {
+    credentials: 'include',
+  });
+  if (!response.ok) {
+    throw new Error(`session request failed: ${response.status}`);
+  }
+  return response.json();
+}
+
+export async function loginSession(token) {
+  const response = await fetch(`${defaultApiUrl()}/api/session`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!response.ok) {
+    throw new Error(response.status === 401 ? 'Access token not recognized.' : 'Sign in failed.');
+  }
+  return response.json();
+}
+
+export async function logoutSession() {
+  const response = await fetch(`${defaultApiUrl()}/api/session`, {
+    method: 'DELETE',
+    credentials: 'include',
+  });
+  if (!response.ok) {
+    throw new Error('Sign out failed.');
+  }
 }

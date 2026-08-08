@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/AliSinaDevelo/Chatster/db"
+	"github.com/AliSinaDevelo/Chatster/internal/auth"
 	"github.com/AliSinaDevelo/Chatster/internal/config"
 	"github.com/gorilla/websocket"
 )
@@ -40,6 +41,37 @@ func testStack(t *testing.T) (cfg config.Config, database *db.DB, hub *Hub, clea
 			t.Errorf("hub shutdown: %v", err)
 		}
 		_ = d.Close()
+	}
+}
+
+func TestNewAuthServiceRequiresOriginsOnlyForSessionMode(t *testing.T) {
+	if _, err := newAuthService(config.Config{AuthMode: auth.ModeAnonymous}); err != nil {
+		t.Fatalf("anonymous auth service: %v", err)
+	}
+
+	sessionConfig := config.Config{
+		AuthMode:            auth.ModeSession,
+		SessionSecret:       strings.Repeat("s", 32),
+		AuthUsersJSON:       integrationAuthUsers,
+		SessionTTL:          30 * time.Minute,
+		AllowedOrigins:      []string{"https://chat.example"},
+		SessionCookieSecure: true,
+	}
+	withoutOrigins := sessionConfig
+	withoutOrigins.AllowedOrigins = nil
+	if _, err := newAuthService(withoutOrigins); err == nil || !strings.Contains(err.Error(), "CHATSTER_ALLOWED_ORIGINS") {
+		t.Fatalf("session mode without origins: got %v", err)
+	}
+	service, err := newAuthService(sessionConfig)
+	if err != nil {
+		t.Fatalf("session auth service: %v", err)
+	}
+	_, cookie, err := service.Exchange("alice-integration-token-with-32-bytes")
+	if err != nil {
+		t.Fatalf("exchange configured token: %v", err)
+	}
+	if !cookie.Secure {
+		t.Fatal("production session config should issue a Secure cookie")
 	}
 }
 
@@ -77,6 +109,31 @@ func TestHealth_DegradedWhenDBClosed(t *testing.T) {
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusServiceUnavailable {
 		t.Fatalf("want 503, got %d", resp.StatusCode)
+	}
+}
+
+func TestAnonymousCORSReflectsCredentialedBrowserOrigin(t *testing.T) {
+	cfg, database, hub, cleanup := testStack(t)
+	defer cleanup()
+	srv := httptest.NewServer(mount(cfg, hub, database))
+	defer srv.Close()
+
+	request, err := http.NewRequest(http.MethodOptions, srv.URL+"/api/session", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Header.Set("Origin", "http://127.0.0.1:3000")
+	request.Header.Set("Access-Control-Request-Method", http.MethodGet)
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = response.Body.Close() }()
+	if response.StatusCode != http.StatusNoContent {
+		t.Fatalf("preflight: got %d want 204", response.StatusCode)
+	}
+	if response.Header.Get("Access-Control-Allow-Origin") != "http://127.0.0.1:3000" || response.Header.Get("Access-Control-Allow-Credentials") != "true" {
+		t.Fatalf("credentialed anonymous CORS headers: %#v", response.Header)
 	}
 }
 
@@ -870,12 +927,13 @@ func latestModerationEvent(t *testing.T, database *db.DB) db.ModerationEvent {
 	t.Helper()
 	var event db.ModerationEvent
 	if err := database.QueryRow(`
-SELECT id, session_id, username, reason, content_preview, content_length, timestamp
+SELECT id, session_id, user_id, username, reason, content_preview, content_length, timestamp
 FROM moderation_audit_log
 ORDER BY id DESC
 LIMIT 1`).Scan(
 		&event.ID,
 		&event.SessionID,
+		&event.UserID,
 		&event.Username,
 		&event.Reason,
 		&event.ContentPreview,

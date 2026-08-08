@@ -178,6 +178,7 @@ func (h *Hub) queueBrokerMessage(message Message) {
 
 	event, err := events.New(newEventID(), message.Room, h.instanceID, events.Message{
 		ID:       message.ID,
+		UserID:   message.UserID,
 		Username: message.Username,
 		Content:  message.Content,
 		Type:     message.Type,
@@ -212,6 +213,7 @@ func (h *Hub) handleRemoteEvent(event events.Envelope) {
 
 	message := Message{
 		ID:        event.Message.ID,
+		UserID:    event.Message.UserID,
 		Username:  event.Message.Username,
 		Content:   event.Message.Content,
 		Type:      event.Message.Type,
@@ -477,6 +479,7 @@ func (h *Hub) sendMessageHistory(client *Client) {
 	for _, msg := range messages {
 		message := Message{
 			ID:        msg.ID,
+			UserID:    msg.UserID,
 			Username:  msg.Username,
 			Content:   msg.Content,
 			Type:      msg.Type,

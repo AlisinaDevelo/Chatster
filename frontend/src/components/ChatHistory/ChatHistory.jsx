@@ -37,9 +37,13 @@ const readReducedMotionPreference = () => (
   window.matchMedia(reducedMotionQuery).matches
 );
 
-const MessageRow = forwardRef(({ message, currentUsername, index, style }, ref) => {
+const MessageRow = forwardRef(({ message, currentUserID, currentUsername, index, style }, ref) => {
   const isNotification = message.type === 'notification';
-  const isOwn = !isNotification && currentUsername && message.username === currentUsername;
+  const isOwn = !isNotification && (
+    currentUserID
+      ? message.user_id === currentUserID
+      : currentUsername && message.username === currentUsername
+  );
 
   return (
     <div
@@ -70,7 +74,7 @@ const MessageRow = forwardRef(({ message, currentUsername, index, style }, ref) 
 
 MessageRow.displayName = 'MessageRow';
 
-const ChatHistory = ({ chatHistory, currentUsername }) => {
+const ChatHistory = ({ chatHistory, currentUserID = '', currentUsername }) => {
   const messagesRef = useRef(null);
   const messagesEndRef = useRef(null);
   const shouldStickToBottomRef = useRef(true);
@@ -175,6 +179,7 @@ const ChatHistory = ({ chatHistory, currentUsername }) => {
         ref={virtualItem ? virtualizer.measureElement : undefined}
         index={index}
         message={message}
+        currentUserID={currentUserID}
         currentUsername={currentUsername}
         style={style}
       />

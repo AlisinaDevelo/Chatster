@@ -12,6 +12,7 @@ Real-time chat reference stack: **Go** WebSocket hub + repository-backed history
 
 - WebSocket broadcast with reconnect, **buffered hub channel**, **bounded per-client outbound queues**, and safe gorilla/websocket write serialization.
 - Room-scoped chat and history, with `general` as the default and selectable `engineering` / `off-topic` rooms in the UI.
+- Explicit auth modes: public anonymous demo by default, or opt-in signed `HttpOnly` sessions with stable user IDs and server-enforced room grants.
 - Last **50** messages replayed on connect per room; **SQLite timestamp** parsing supports multiple on-disk formats.
 - **`GET /health`** with selected-storage ping (503 when degraded); **`GET /metrics`** for Prometheus.
 - **Abuse controls:** max username/message size (runes), per-IP **WebSocket upgrade** rate limit, per-client **message** rate limit, optional **`Origin`** allowlist.
@@ -105,7 +106,12 @@ The root Docker image and checked-in [`render.yaml`](render.yaml) are ready for 
 | `CHATSTER_POSTGRES_DSN` | Backend secret | Postgres connection string; required when storage is `postgres` and never logged. |
 | `CHATSTER_POSTGRES_MIN_CONNS` / `CHATSTER_POSTGRES_MAX_CONNS` | Backend | Postgres pool bounds (defaults `2` / `10`). |
 | `CHATSTER_STATIC_DIR` | Backend | Optional built frontend directory served by the Go backend. |
-| `CHATSTER_ALLOWED_ORIGINS` | Backend | Comma-separated `Origin` values for WebSocket; **empty = allow all** (dev only). |
+| `CHATSTER_ALLOWED_ORIGINS` | Backend | Comma-separated HTTP/WebSocket `Origin` allowlist. Required in session mode; empty allows all only in anonymous demo mode. |
+| `CHATSTER_AUTH_MODE` | Backend | `anonymous` by default; set `session` to require signed browser sessions for history and WebSockets. |
+| `CHATSTER_SESSION_SECRET` | Backend secret | HMAC signing key of at least 32 bytes; required and never logged in session mode. |
+| `CHATSTER_AUTH_USERS_JSON` | Backend secret | Provisioned 32-512 byte access tokens, stable user IDs, display names, and up to 64 room grants; required and never logged in session mode. |
+| `CHATSTER_SESSION_TTL` | Backend | Signed-session lifetime from `1m` through `24h` (default `1h`). |
+| `CHATSTER_SESSION_COOKIE_SECURE` | Backend | Secure cookies default to `true`; set `false` only for local HTTP development. |
 | `CHATSTER_WS_UPGRADE_RPS` | Backend | WS upgrades per IP per second (default `5`; `0` disables). |
 | `CHATSTER_WS_UPGRADE_BURST` | Backend | Token bucket burst for WS upgrades (default `10`). |
 | `CHATSTER_MESSAGE_RPS` | Backend | Chat messages per client per second (default `5`; `0` disables). |

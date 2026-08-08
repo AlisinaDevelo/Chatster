@@ -20,6 +20,7 @@ const (
 // Message represents a chat message.
 type Message struct {
 	ID        int64     `json:"id,omitempty"`
+	UserID    string    `json:"user_id,omitempty"`
 	Username  string    `json:"username"`
 	Content   string    `json:"content"`
 	Type      string    `json:"type"`
@@ -50,6 +51,10 @@ func saveMessageObservedInRoom(database db.Repository, room, username, content, 
 }
 
 func saveMessageObservedInRoomContext(parent context.Context, database db.Repository, room, username, content, msgType string) (*db.Message, error) {
+	return saveMessageObservedForUserInRoomContext(parent, database, room, "", username, content, msgType)
+}
+
+func saveMessageObservedForUserInRoomContext(parent context.Context, database db.Repository, room, userID, username, content, msgType string) (*db.Message, error) {
 	started := time.Now()
 	if parent == nil {
 		parent = context.Background()
@@ -67,7 +72,7 @@ func saveMessageObservedInRoomContext(parent context.Context, database db.Reposi
 		attribute.String("chatster.message.type", msgType),
 	)
 	defer span.End()
-	msg, err := database.SaveMessageInRoomContext(ctx, room, username, content, msgType)
+	msg, err := database.SaveMessageForUserInRoomContext(ctx, room, userID, username, content, msgType)
 	result := "ok"
 	if err != nil {
 		result = "error"

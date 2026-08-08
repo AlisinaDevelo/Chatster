@@ -16,7 +16,7 @@ var (
 	WSUpgrades = promauto.NewCounterVec(prometheus.CounterOpts{
 		Namespace: "chatster",
 		Name:      "websocket_upgrades_total",
-		Help:      "WebSocket upgrade attempts by result (ok, denied_origin, rate_limited, upgrade_error, draining).",
+		Help:      "WebSocket upgrade attempts by result (ok, authentication_required, forbidden_room, denied_origin, rate_limited, upgrade_error, draining).",
 	}, []string{"result"})
 
 	WSDrainStarted = promauto.NewCounter(prometheus.CounterOpts{
@@ -59,7 +59,7 @@ var (
 	MessagesRejected = promauto.NewCounterVec(prometheus.CounterOpts{
 		Namespace: "chatster",
 		Name:      "chat_messages_rejected_total",
-		Help:      "Chat messages rejected by reason (invalid_username, invalid_body, rate_limited).",
+		Help:      "Chat messages rejected by reason (invalid_username, invalid_body, identity_override, rate_limited).",
 	}, []string{"reason"})
 
 	MessagesPruned = promauto.NewCounter(prometheus.CounterOpts{

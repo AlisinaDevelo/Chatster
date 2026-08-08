@@ -3,7 +3,9 @@ package config
 import (
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
+	"time"
 )
 
 func TestFromEnvDefaults(t *testing.T) {
@@ -19,6 +21,11 @@ func TestFromEnvDefaults(t *testing.T) {
 	t.Setenv("CHATSTER_INSTANCE_ID", "")
 	t.Setenv("CHATSTER_STATIC_DIR", "")
 	t.Setenv("CHATSTER_ALLOWED_ORIGINS", "")
+	t.Setenv("CHATSTER_AUTH_MODE", "")
+	t.Setenv("CHATSTER_SESSION_SECRET", "")
+	t.Setenv("CHATSTER_AUTH_USERS_JSON", "")
+	t.Setenv("CHATSTER_SESSION_TTL", "")
+	t.Setenv("CHATSTER_SESSION_COOKIE_SECURE", "")
 	t.Setenv("CHATSTER_MESSAGE_RETENTION_DAYS", "")
 	t.Setenv("CHATSTER_AUDIT_RETENTION_DAYS", "")
 	t.Setenv("CHATSTER_WS_UPGRADE_RPS", "")
@@ -42,6 +49,9 @@ func TestFromEnvDefaults(t *testing.T) {
 	if cfg.StaticDir != "" {
 		t.Fatalf("StaticDir: got %q want empty", cfg.StaticDir)
 	}
+	if cfg.AuthMode != "anonymous" || cfg.SessionTTL != time.Hour || !cfg.SessionCookieSecure {
+		t.Fatalf("auth defaults: mode=%q ttl=%s secure=%v", cfg.AuthMode, cfg.SessionTTL, cfg.SessionCookieSecure)
+	}
 	if cfg.DisableWSRateLimit {
 		t.Fatal("expected WS rate limit enabled by default")
 	}
@@ -59,6 +69,25 @@ func TestFromEnvDefaults(t *testing.T) {
 	}
 	if cfg.AuditRetentionDays != defaultAuditRetentionDays {
 		t.Fatalf("AuditRetentionDays: got %d want %d", cfg.AuditRetentionDays, defaultAuditRetentionDays)
+	}
+}
+
+func TestFromEnvAuthConfiguration(t *testing.T) {
+	t.Setenv("CHATSTER_AUTH_MODE", " SESSION ")
+	t.Setenv("CHATSTER_SESSION_SECRET", strings.Repeat("s", 32))
+	t.Setenv("CHATSTER_AUTH_USERS_JSON", `[{"token":"opaque","user_id":"usr_alice"}]`)
+	t.Setenv("CHATSTER_SESSION_TTL", "30m")
+	t.Setenv("CHATSTER_SESSION_COOKIE_SECURE", "false")
+
+	cfg := FromEnv()
+	if cfg.AuthMode != "session" {
+		t.Fatalf("AuthMode: got %q want session", cfg.AuthMode)
+	}
+	if cfg.SessionTTL != 30*time.Minute || cfg.SessionCookieSecure {
+		t.Fatalf("session cookie config: ttl=%s secure=%v", cfg.SessionTTL, cfg.SessionCookieSecure)
+	}
+	if len(cfg.SessionSecret) != 32 || cfg.AuthUsersJSON == "" {
+		t.Fatal("session secrets were not loaded")
 	}
 }
 

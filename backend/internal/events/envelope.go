@@ -21,6 +21,7 @@ const (
 // The envelope owns the room and persistence timestamp.
 type Message struct {
 	ID       int64  `json:"id"`
+	UserID   string `json:"user_id,omitempty"`
 	Username string `json:"username"`
 	Content  string `json:"content"`
 	Type     string `json:"type"`
@@ -92,6 +93,9 @@ func (e Envelope) Validate() error {
 	if e.Message.ID <= 0 {
 		return fmt.Errorf("event message ID must be positive")
 	}
+	if e.Message.UserID != "" && (!validUserID(e.Message.UserID) || e.Message.UserID != strings.TrimSpace(e.Message.UserID)) {
+		return fmt.Errorf("event message user ID is invalid")
+	}
 	if strings.TrimSpace(e.Message.Username) == "" {
 		return fmt.Errorf("event message username is required")
 	}
@@ -102,6 +106,20 @@ func (e Envelope) Validate() error {
 		return fmt.Errorf("event message type must be durable")
 	}
 	return nil
+}
+
+func validUserID(value string) bool {
+	if len(value) == 0 || len(value) > 128 {
+		return false
+	}
+	for _, char := range value {
+		isLetter := char >= 'a' && char <= 'z' || char >= 'A' && char <= 'Z'
+		isDigit := char >= '0' && char <= '9'
+		if !isLetter && !isDigit && char != '.' && char != '_' && char != ':' && char != '-' {
+			return false
+		}
+	}
+	return true
 }
 
 // Channel returns the exact Redis channel for a canonical room and namespace.
