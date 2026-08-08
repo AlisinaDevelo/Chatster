@@ -12,7 +12,7 @@ async function waitForLive(page) {
 async function joinChat(page, username) {
   const input = page.getByPlaceholder(/enter your username/i);
   await input.fill(username);
-  await page.getByRole('button', { name: 'Join chat' }).click();
+  await input.press('Enter');
   await expect(page.getByText(username, { exact: true })).toBeVisible();
   await expect(page.getByPlaceholder(/type your message/i)).toBeEnabled();
 }
@@ -21,7 +21,7 @@ async function sendMessage(page, content) {
   const input = page.getByPlaceholder(/type your message/i);
   await expect(input).toBeEnabled();
   await input.fill(content);
-  await page.getByRole('button', { name: 'Send' }).click();
+  await input.press('Enter');
   await expect(messageContent(page, content)).toBeVisible();
 }
 

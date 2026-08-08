@@ -19,7 +19,9 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: isCI,
   retries: isCI ? 2 : 0,
-  workers: isCI ? 1 : undefined,
+  // Browser projects share one backend process and SQLite fixture; isolate tests while
+  // retaining the two-tab concurrency coverage inside the room-isolation test.
+  workers: 1,
   timeout: 45_000,
   expect: {
     timeout: 15_000,
