@@ -8,11 +8,42 @@ const frontendDir = process.cwd();
 const backendDir = path.resolve(frontendDir, '..', 'backend');
 const backendPort = '8080';
 const frontendPort = '3000';
-const baseURL = `http://127.0.0.1:${frontendPort}`;
+const configuredBaseURL = process.env.CHATSTER_E2E_BASE_URL?.trim().replace(/\/+$/, '');
+if (configuredBaseURL && !/^https?:\/\//.test(configuredBaseURL)) {
+  throw new Error('CHATSTER_E2E_BASE_URL must start with http:// or https://');
+}
+const baseURL = configuredBaseURL || `http://127.0.0.1:${frontendPort}`;
 const databasePath = path.join(
   os.tmpdir(),
   `chatster-playwright-${process.pid}-${randomUUID()}.db`
 );
+
+const localWebServers = [
+  {
+    command: 'go run .',
+    cwd: backendDir,
+    url: `http://127.0.0.1:${backendPort}/health`,
+    timeout: 120_000,
+    reuseExistingServer: !isCI,
+    env: {
+      CHATSTER_HTTP_ADDR: `127.0.0.1:${backendPort}`,
+      CHATSTER_DB_PATH: databasePath,
+      CHATSTER_WS_UPGRADE_RPS: '0',
+      CHATSTER_MESSAGE_RPS: '0',
+    },
+  },
+  {
+    command: `npm start -- --host 127.0.0.1 --port ${frontendPort}`,
+    cwd: frontendDir,
+    url: baseURL,
+    timeout: 120_000,
+    reuseExistingServer: !isCI,
+    env: {
+      VITE_WS_PORT: backendPort,
+      VITE_API_PORT: backendPort,
+    },
+  },
+];
 
 export default defineConfig({
   testDir: './e2e',
@@ -52,30 +83,5 @@ export default defineConfig({
       use: { ...devices['Desktop Safari'] },
     },
   ],
-  webServer: [
-    {
-      command: 'go run .',
-      cwd: backendDir,
-      url: `http://127.0.0.1:${backendPort}/health`,
-      timeout: 120_000,
-      reuseExistingServer: !isCI,
-      env: {
-        CHATSTER_HTTP_ADDR: `127.0.0.1:${backendPort}`,
-        CHATSTER_DB_PATH: databasePath,
-        CHATSTER_WS_UPGRADE_RPS: '0',
-        CHATSTER_MESSAGE_RPS: '0',
-      },
-    },
-    {
-      command: `npm start -- --host 127.0.0.1 --port ${frontendPort}`,
-      cwd: frontendDir,
-      url: baseURL,
-      timeout: 120_000,
-      reuseExistingServer: !isCI,
-      env: {
-        VITE_WS_PORT: backendPort,
-        VITE_API_PORT: backendPort,
-      },
-    },
-  ],
+  ...(configuredBaseURL ? {} : { webServer: localWebServers }),
 });

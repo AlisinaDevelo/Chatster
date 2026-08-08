@@ -99,6 +99,28 @@ The repository does not claim a live demo URL until this Blueprint is actually c
 
 ## Smoke after deploy
 
+Run the repository-owned HTTP smoke against the exact HTTPS origin. It checks the database
+health response, both public room routes, Prometheus metrics, and room-filtered history without
+printing response bodies:
+
+```bash
+./scripts/smoke-deployment.sh https://<service>.onrender.com
+```
+
+Run the same browser workflow used for the local Chromium CI smoke against the deployed origin.
+It opens two tabs for room isolation and exercises reload history; the test writes uniquely named
+demo messages, so use it only against an environment where that is acceptable:
+
+```bash
+cd frontend
+CHATSTER_E2E_BASE_URL=https://<service>.onrender.com npm run test:e2e:ci
+```
+
+The production-image CI job runs `scripts/smoke-deployment.sh` against the built container, while
+the external URL commands above remain a manual Render proof until the service exists.
+
+For a quick single-request check:
+
 ```bash
 curl -fsS https://chatster.example.com/health
 ```

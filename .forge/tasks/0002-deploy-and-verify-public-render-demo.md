@@ -1,7 +1,7 @@
 ---
 id: 0002
 title: Deploy and verify the public Render demo
-status: ready
+status: in-progress
 agent: release-engineer
 model: sonnet
 depends_on: []
@@ -23,3 +23,8 @@ Use `render.yaml` and `docs/DEPLOYMENT.md`. Keep `numInstances: 1` while storage
 
 ## Notes
 Platform references: https://render.com/docs/web-services, https://render.com/docs/blueprint-spec, and https://render.com/docs/disks.
+- Added `scripts/smoke-deployment.sh` for health, room-route, metrics, and room-filtered history checks.
+- Added `CHATSTER_E2E_BASE_URL` support so the existing Chromium smoke can target a deployed origin without starting local servers.
+- The production-image CI job now runs the same HTTP smoke script used for post-deploy verification.
+- Local HTTP smoke, Go race tests, frontend tests/build, and the full local Chromium suite pass.
+- The external Render deployment remains pending because this workspace has no Render account, service, CLI, or deployment credentials; no public URL is claimed yet.

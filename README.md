@@ -93,7 +93,7 @@ The production path serves the UI and API from one origin; CI builds and smoke-t
 
 ## Deployment status
 
-The root Docker image and checked-in [`render.yaml`](render.yaml) are ready for a single-instance Render deployment with a persistent SQLite disk. A public URL is intentionally not listed until the repository is connected to a Render account and the deployed origin is configured in `CHATSTER_ALLOWED_ORIGINS`; see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
+The root Docker image and checked-in [`render.yaml`](render.yaml) are ready for a single-instance Render deployment with a persistent SQLite disk. A public URL is intentionally not listed until the repository is connected to a Render account and the deployed origin is configured in `CHATSTER_ALLOWED_ORIGINS`; see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for the HTTP and browser smoke commands.
 
 ## Configuration
 
@@ -127,6 +127,7 @@ See `backend/.env.example` and `frontend/.env.example`.
 | `make lint` | golangci-lint + ESLint (requires golangci-lint installed locally). |
 | `make docker-up` | `docker compose up --build`. |
 | `docker build -t chatster:prod .` | Build the single-service production image; CI also smokes this path. |
+| `./scripts/smoke-deployment.sh <url>` | Verify a deployed or locally running origin's health, rooms, metrics, and history endpoints. |
 | `cd backend && go test -race ./...` | Go tests (includes HTTP + WebSocket integration tests). |
 | `cd frontend && npm run test:ci` | Vitest once. |
 | `cd frontend && npm run build` | Optimized static build. |

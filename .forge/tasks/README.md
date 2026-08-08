@@ -5,7 +5,7 @@ GitHub is the task source of truth; the Markdown files in this directory are the
 | ID | Issue | Title | Status | Priority | Depends on |
 |----|-------|-------|--------|----------|------------|
 | 0001 | [#19](https://github.com/AlisinaDevelo/Chatster/issues/19) | Close the public-proof and scale-ready backlog | done | epic | - |
-| 0002 | [#20](https://github.com/AlisinaDevelo/Chatster/issues/20) | Deploy and verify the public Render demo | ready | now | - |
+| 0002 | [#20](https://github.com/AlisinaDevelo/Chatster/issues/20) | Deploy and verify the public Render demo | in-progress | now | - |
 | 0003 | [#21](https://github.com/AlisinaDevelo/Chatster/issues/21) | Add Playwright browser-matrix smoke coverage | done | now | - |
 | 0004 | [#22](https://github.com/AlisinaDevelo/Chatster/issues/22) | Gracefully drain WebSocket clients on shutdown | done | next | - |
 | 0005 | [#23](https://github.com/AlisinaDevelo/Chatster/issues/23) | Add opt-in OpenTelemetry tracing | done | later | - |
