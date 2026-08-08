@@ -103,7 +103,7 @@ func (b *RedisFanout) Publish(ctx context.Context, event events.Envelope) error 
 	}
 	if event.OriginInstance != b.instanceID {
 		metrics.RedisPublishes.WithLabelValues("error").Inc()
-		return errors.New("Redis event origin does not match this instance")
+		return errors.New("redis event origin does not match this instance")
 	}
 	channel, err := events.Channel(b.namespace, event.Room)
 	if err != nil {
@@ -126,7 +126,7 @@ func (b *RedisFanout) Publish(ctx context.Context, event events.Envelope) error 
 // Run subscribes to every room in the namespace and reconnects with bounded backoff.
 func (b *RedisFanout) Run(ctx context.Context, handler func(events.Envelope)) error {
 	if handler == nil {
-		return errors.New("Redis event handler is required")
+		return errors.New("redis event handler is required")
 	}
 	pattern, err := events.ChannelPattern(b.namespace)
 	if err != nil {
@@ -140,7 +140,7 @@ func (b *RedisFanout) Run(ctx context.Context, handler func(events.Envelope)) er
 			return nil
 		}
 		if err == nil {
-			err = errors.New("Redis subscription stopped")
+			err = errors.New("redis subscription stopped")
 		}
 		metrics.RedisReconnects.Inc()
 		slog.Warn("redis broker reconnecting", "namespace", b.namespace, "err", err)
