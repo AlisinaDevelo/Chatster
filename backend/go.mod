@@ -1,6 +1,6 @@
 module github.com/AliSinaDevelo/Chatster
 
-go 1.25.0
+go 1.26.0
 
 require (
 	github.com/gorilla/mux v1.8.1
@@ -14,7 +14,7 @@ require (
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp v1.46.0
 	go.opentelemetry.io/otel/sdk v1.46.0
 	go.opentelemetry.io/otel/trace v1.46.0
-	golang.org/x/time v0.9.0
+	golang.org/x/time v0.16.0
 )
 
 require (
